@@ -100,7 +100,7 @@ data %>%
 data %>% 
   mutate(whiff_percent = whiff_percent/100) %>% 
   ggplot(aes(x = pitch_name, y = whiff_percent, fill = pitch_name)) +
-  geom_boxplot() +
+  geom_boxplot(show.legend = FALSE) +
   theme_classic() +
   scale_y_continuous(labels = scales::percent) +
   theme(plot.title = element_text(hjust = 0.5),
@@ -127,7 +127,7 @@ data %>%
 
 <br>
 
-```{r Pitch Data - Movement and Outcomes, echo = FALSE, warning = FALSE}
+```{r Pitch Data - Movement and Outcomes, echo = FALSE, warning = FALSE, message = FALSE}
 
 # Movement and Pitches
 data %>% 
@@ -139,7 +139,23 @@ data %>%
   labs(title = "Pitch Movement by Pitch Type",
        subtitle = "2022 Season Averages",
        x = "Horizontal Break (In.)",
-       y = "Horizontal Break (In.)")
+       y = "Vertical Break (In.)")
+
+# GG Highlight
+library(gghighlight)
+data %>% 
+  ggplot(aes(x = pitcher_break_x, y = pitcher_break_z, color = pitch_name)) +
+  geom_point(alpha = 0.4) +
+  gghighlight() +
+  facet_wrap(~ fct_reorder(pitch_name, avg_speed, .desc = TRUE), dir = "v") +
+  theme_bw() +
+  labs(title = "Pitch Movement by Pitch Type",
+       subtitle = "2022 Season Averages",
+       x = "Horizontal Break (In.)",
+       y = "Vertical Break (In.)") # change labels
+
+# dir = "v" changes the wrap-fill from side-side to up-down
+
 
 game_test %>% 
   ggplot(aes(x = `HBreak (In.)`, y = `VBreak (In.)`, color = `Pitch Type`)) +
@@ -150,7 +166,7 @@ game_test %>%
   labs(title = "Pitch Movement by Pitch Type",
        subtitle = "Phillies vs. Pirates - September 6, 2023",
        x = "Horizontal Break (In.)",
-       y = "Horizontal Break (In.)")
+       y = "Vertical Break (In.)")
 
 # Outcomes
 game_test %>% 
