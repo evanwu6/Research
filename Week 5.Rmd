@@ -105,17 +105,17 @@ p50 <- quantile(comps_2022$woba, probs = 0.5)
 p90 <- quantile(comps_2022$woba, probs = 0.1)
 
 pitchers_10 <- comps_2022 %>% 
-  filter(woba > p10 - 0.010 & woba < p10 + 0.005,
+  filter(woba > p10 - 0.010 & woba < p10 + 0.010,
          FF_speed > 93 & FF_speed < 95) %>% 
   mutate(ID = "Bad")
 
 pitchers_50 <- comps_2022 %>% 
-  filter(woba > p50 - 0.010 & woba < p50 + 0.005,
+  filter(woba > p50 - 0.010 & woba < p50 + 0.010,
          FF_speed > 93 & FF_speed < 95) %>% 
   mutate(ID = "Decent")
 
 pitchers_90 <- comps_2022 %>% 
-  filter(woba > p90 - 0.010 & woba < p90 + 0.005,
+  filter(woba > p90 - 0.010 & woba < p90 + 0.010,
          FF_speed > 93.5 & FF_speed < 94.5) %>% 
   mutate(ID = "Great")
 
@@ -296,5 +296,40 @@ delta_sl %>%
   labs(title = "Speed Differential (Against Average) for Sliders") +
   NULL
 
+
+delta_sl %>% 
+  mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
+  ggplot(aes(x = "", y = abs(delta_speed))) +
+  geom_boxplot(aes(fill = ID)) +
+  geom_jitter(width = 0.075, height = 0, alpha = 0.075) +
+  facet_wrap(~ player_name) +
+  labs(title = "Absolute Speed Differential (Against Average) for Sliders") +
+  NULL
+
+
+
+delta_all <- pitchers %>% 
+  left_join(avg, by = c("player_name", "pitch_type")) %>% 
+  mutate(delta_speed = pitch_speed - speed,
+         delta_mov_x = pfx_x - `_x`,
+         delta_mov_z = pfx_x - `_z`,
+         delta_spin = release_spin_rate - spin_rate) %>% 
+  select(-speed:-spin_rate) %>% 
+aggregate(abs(delta_speed) ~ player_name + pitch_type, data = ., FUN = mean) %>% 
+  mutate(ID = case_when(
+    player_name  %in% c("Gallen, Zac", "Manoah, Alek", "Scherzer, Max") ~ "Great",
+    player_name  %in% c("López, Pablo", "Garcia, Luis", "Taillon, Jameson") ~ "Decent",
+    player_name  %in% c("Berríos, José", "Gray, Josiah", "Keller, Brad") ~ "Bad"
+  ))
+
+delta_all %>% 
+  ggplot(aes(x = "", y = `abs(delta_speed)`, color = ID)) +
+  geom_jitter(width = 0.25, show.legend = FALSE) +
+  facet_wrap(~ ID)
+
+delta_all %>% 
+  ggplot(aes(x = "", y = `abs(delta_speed)`, color = pitch_type)) +
+  geom_jitter(width = 0.25, show.legend = FALSE) +
+  facet_wrap(~ ID)
 ```
 
