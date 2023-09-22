@@ -179,6 +179,7 @@ game_test %>%
 
 <br>
 
+
 ```{r Pitch Data - Speed and Spin, echo = FALSE, warning = FALSE}
 
 # Speed/Spin and Pitches

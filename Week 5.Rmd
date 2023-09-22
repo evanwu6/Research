@@ -1,15 +1,20 @@
-# Libraries ####
+---
+title: "Week 5"
+author: "Evan Wu"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+<br>
+##### Libraries
+``` {r Libraries, message = FALSE, warning = FALSE}
 library(tidyverse)
 library(readxl)
 library(ggforce)
+```
 
-# Data Import ####
+``` {r Data, echo = FALSE, message = FALSE, warning = FALSE}
 data <- read_csv("pitch_arsenals.csv")
-movement <- read_csv("~/Downloads/Baseball Analytics/Diamond Dollars 2023/Statcast Data 2022/Group B/Libka 9-12-22/TEX at MIA 9-12-22.csv")
-
-movement %>% 
-  select(pitch_type, release_speed, p_throws, pfx_x, pfx_z) %>% 
-  View()
 
 strider <- read_csv("Strider_9_13_23.csv") %>% 
   select(-game_date, -`pitcher...8`, -spin_dir:-break_length_deprecated,
@@ -25,9 +30,9 @@ pitchers <- rbind(pitchers,
                   read_csv(paste0("Data/",files[i])))
 }
 
-unique(pitchers$pitcher...60)
+```
 
-
+``` {r Functions, echo = FALSE}
 # Geom Zone (Jackie's) ####
 
 geom_zone <- function(top = 11/3, bottom = 3/2, linecolor = "black"){
@@ -35,32 +40,28 @@ geom_zone <- function(top = 11/3, bottom = 3/2, linecolor = "black"){
             alpha = 0, color = linecolor, linewidth = 0.75)
 }
 
-geom_plate <- function(){
-  df <- data.frame(x = c(-.7083, .7083, .7083 ,0, -.7083), y = c(0, 0, -.25, -.5, -.25))
-  g <- geom_polygon(data = df, aes(x = x, y = y), fill = "white", color = "black", linewidth = 1.25)
+# c(0, 0, -.25, -.5, -.25))
+
+geom_plate <- function(pov = "pitcher"){
+   df <- case_when(
+     pov == "pitcher" ~ 
+       data.frame(x = c(-.7083, .7083, .7083 ,0, -.7083), y = c(0, 0, .25, .5, .25)),
+     pov == "catcher" ~ 
+       data.frame(x = c(-.7083, .7083, .7083 ,0, -.7083), y = c(0, 0, -.25, -.5, -.25))
+   )
+  
+   g <- geom_polygon(data = df, aes(x = x, y = y), fill = "white", color = "black", linewidth = 1.25)
   g
 }
+```
 
 
-
-# Data Exploration ####
-median(data$ff_avg_spin, na.rm = TRUE)
-median(data$sl_avg_spin, na.rm = TRUE)
-median(data$cu_avg_spin, na.rm = TRUE)
-
-# Data Viz ####
+``` {r Strider EDA Viz}
 # Color / Shape = Pitch
 strider %>% 
-  ggplot(aes(x = plate_x, y = plate_z)) +
-  geom_segment(x = -8.5/12, y = 18/12, xend = 8.5/12, yend = 18/12,
-               linewidth = 0.5) +
-  geom_segment(x = -8.5/12, y = 44/12, xend = 8.5/12, yend = 44/12,
-               linewidth = 0.5) +
-  geom_segment(x = -8.5/12, y = 18/12, xend = -8.5/12, yend = 44/12,
-               linewidth = 0.5) +
-  geom_segment(x = 8.5/12, y = 18/12, xend = 8.5/12, yend = 44/12,
-               linewidth = 0.5) +
-  geom_plate() +
+  ggplot(aes(x = -plate_x, y = plate_z)) +
+  geom_zone() +
+  geom_plate(pov = "pitcher") +
   geom_point(aes(shape = pitch_type, color = pitch_type), alpha = 0.85) + 
   coord_fixed() +
   labs(color = "Pitch",
@@ -171,3 +172,4 @@ strider %>%
        subtitle = "ATL @ PHI - September 13, 2023") +
   geom_smooth(se = FALSE) +
   NULL
+```

@@ -1,0 +1,125 @@
+---
+title: "SABR Meeting Code"
+author: "Evan Wu"
+date: "September 6, 2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<br>
+<br>
+
+#### Loading Libraries
+
+```{r Libraries, message = FALSE}
+library(tidyverse)
+library(ranger)
+library(readxl)
+library(knitr)
+
+set.seed(20230906)
+```
+ 
+
+<br>
+
+#### Reading in and cleaning up data
+
+##### *Data is all qualified hitters (502+ PA) for the 2022 season* 
+
+```{r Data, message = FALSE}
+# Reading in excel files
+baseball_og <- read_excel("2022 Baseball.xlsx") %>% 
+  mutate("OPS" = (OBP + SLG))
+
+# Removing unused variables
+baseball <- baseball_og %>% 
+  select(wOBA, AVG, OBP, SLG)
+
+# Creating a dataset with our theoretical player's values
+sample <- rbind(c("Player A", 0.310, 0.330, 0.420), 
+                c("Player B", 0.265, 0.385, 0.410)) %>% 
+  as.data.frame() %>% 
+  rename(Name = V1, AVG = V2, OBP = V3, SLG = V4) %>% 
+  mutate(AVG = as.numeric(AVG),
+         OBP = as.numeric(OBP),
+         SLG = as.numeric(SLG))
+```
+
+<br>
+
+#### Making models with data
+
+```{r Models}
+# Linear Regression and Random Forest Models to predict wOBA
+linear <- lm(wOBA ~ AVG + OBP + SLG, data = baseball)
+rf <- ranger(wOBA ~ AVG + OBP + SLG, data = baseball)
+
+```
+
+<br>
+ 
+``` {r Results, echo = FALSE, message = FALSE}
+
+# OPS Model
+ops_lm <- lm(OPS ~ AVG + OBP + SLG, data = baseball_og)
+ops_rf <- ranger(OPS ~ AVG + OBP + SLG, data = baseball_og)
+
+# wRC+ Model
+wrc_lm <- lm(`wRC+` ~ AVG + OBP + SLG, data = baseball_og)
+wrc_rf <- ranger(`wRC+` ~ AVG + OBP + SLG, data = baseball_og)
+
+# WAR Model
+war_lm <- lm(WAR ~ AVG + OBP + SLG, data = baseball_og)
+war_rf <- ranger(WAR ~ AVG + OBP + SLG, data = baseball_og)
+
+# Using the models we made to predict wOBA based on the theoretical players' stats
+lm_preds <- sample %>% 
+  mutate("Pred. wOBA" = predict(linear, sample) %>% round(3),
+         "Pred. OPS" = predict(ops_lm, sample) %>% round(3),
+         "Pred. wRC+" = predict(wrc_lm, sample) %>% round(1),
+         "Pred. WAR" = predict(war_lm, sample) %>% round(1))
+
+lm_preds %>% 
+  kable(caption = "Predictions Made With the Linear Regression Models")
+```
+
+<br>
+
+``` {r Results 2, echo = FALSE}
+rf_preds <- sample %>% 
+  mutate("Pred. wOBA" = predict(rf, sample)$predictions %>% round(3),
+         "Pred. OPS" = predict(ops_rf, sample)$predictions %>% round(3),
+         "Pred. wRC+" = predict(wrc_rf, sample)$predictions %>% round(1),
+         "Pred. WAR" = predict(war_rf, sample)$predictions %>% round(1))
+
+
+rf_preds %>% 
+  kable(caption = "Predictions Made With the Random Forest Models")
+```
+
+<br>
+
+#### Conclusions
+Now this is interesting! The linear models (which capture linear, additive
+relationships) seem to believe that Player B (high obp, low avg) to be better
+on average at wOBA, OPS, wRC+, and WAR. In short, EVERY statistic we predicted.
+However, the random forest models (which capture the interactions between
+different variables and their values) seems to believe that Player A (low obp,
+high avg) is better at EVERY statistic that we predicted. 
+
+Does this mean that the players are equal? Not necessarily. It is possible that
+by themselves, Player B with those three statistics can predicted to have better
+offensive production, but Player A may be better if you take into account what
+the value of those three statistics as they interact together (i.e. predicting
+WAR when someone has a batting average of .310 **and** an OBP .330, which
+would artifically infer a low walk rate, which linear models can't do).
+
+This is why model choice is so important--while both can be quite useful, they
+sometimes go about solving problems in fundamentally different ways, and so can
+find different answers.
+
+Who do you think is better?
