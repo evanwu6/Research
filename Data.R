@@ -13,6 +13,7 @@ library(forcats)
 stats_2022 <- read_csv("Pitcher Seasonal Data/2022_pitcher_stats.csv") %>% 
   select(-...13)
 
+
 # 2022 Pitch Arsenal Data ####
 # Downloaded: September 23, 2023
 
@@ -128,6 +129,7 @@ pitchers <- pitchers %>%
          sz_top, sz_bot, hit_distance_sc:release_extension,
          estimated_ba_using_speedangle:woba_value, at_bat_number) %>% 
   mutate(pitch_name = str_replace(pitch_name, "4-Seam Fastball", "4-Seam")) 
+
 
 # Making Pitcher Comparions ####
 comps_2022 <- stats_2022 %>% 
