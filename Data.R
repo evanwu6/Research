@@ -154,11 +154,11 @@ pitchers <- pitchers %>%
 
 # Making Pitcher Comparions ####
 comps_2022 <- stats_2022 %>% 
-  left_join(speed_2022, c("player_id" = "pitcher")) %>% 
-  select(first_name.x, last_name.x, player_id, woba, ff_avg_speed) %>% 
+  left_join(filter(arsenal_speed, pitch_type == "FF"), c("player_id" = "pitcher")) %>% 
+  select(first_name.x, last_name.x, player_id, woba, pitch_speed) %>% 
   rename(first_name = first_name.x,
          last_name = last_name.x,
-         FF_speed = ff_avg_speed) %>% 
+         FF_speed = pitch_speed) %>% 
   arrange(woba)
 
 p10 <- quantile(comps_2022$woba, probs = 0.9)
@@ -187,3 +187,11 @@ sample <- candidates %>%
                           "677651", "641154", "592791",
                           "668678", "453286", "666201"))
 
+
+# CSV Exports ####
+
+# Pitch Arsenal CSV
+write.csv(arsenal, "arsenal.csv")
+
+# Pitch-by-Pitch "Pitchers" CSV
+write.csv(pitchers, "pitcher_comps.csv")
