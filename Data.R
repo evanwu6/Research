@@ -77,6 +77,20 @@ arsenal_perc <- arsenal_perc %>%
          pitch_type = str_replace(pitch_type, "n_sv", "SV"))
 
 
+# Pitch Movement
+# URL: https://baseballsavant.mlb.com/leaderboard/pitch-movement?year=2022&team=&min=50&pitch_type=ALL&hand=&x=diff_x_hidden&z=diff_z_hidden
+arsenal_movement <- read_csv("Pitch Type Data/2022_arsenal_movement.csv") %>% 
+  mutate(pitch_type = str_replace(pitch_type, "SIFT", "SI"),
+         pitch_type = str_replace(pitch_type, "CUKC", "CU")) %>% 
+  filter(pitch_type != "FA")
+
+arsenal_movement <- arsenal_movement %>% 
+  rename(pitch_name = pitch_type_name,
+         player_id = pitcher_id) %>% 
+  select(player_id, pitch_type, pitch_hand,
+         pitcher_break_x, pitcher_break_z, avg_speed)
+
+
 # Pitch Stats
 # URL: https://baseballsavant.mlb.com/leaderboard/pitch-arsenal-stats?type=pitcher&pitchType=&year=2022&team=&min=10
 arsenal_stats <- read_csv("Pitch Type Data/2022_arsenal_stats.csv") %>% 
@@ -86,14 +100,21 @@ arsenal_stats <- read_csv("Pitch Type Data/2022_arsenal_stats.csv") %>%
          team = team_name_alt) %>% 
   filter(pitch_type != "FA")
 
+# Combining Databases
 arsenal <- arsenal_stats %>% 
   left_join(select(arsenal_speed, pitcher:pitch_speed), 
             by = c("player_id" = "pitcher", "pitch_type" = "pitch_type")) %>% 
   left_join(select(arsenal_spin, pitcher:pitch_spin), 
             by = c("player_id" = "pitcher", "pitch_type" = "pitch_type")) %>% 
-  select(first_name, last_name, player_id:pitch_name, pitch_speed, pitch_spin,
-         pitches, pitch_usage, rv100, run_value,
-         pa:hard_hit_percent)
+  left_join(arsenal_movement, 
+            by = c("player_id" = "player_id", "pitch_type" = "pitch_type")) %>% 
+  select(first_name, last_name, player_id, pitch_hand,
+         team:pitch_name, pitches, pitch_usage,
+         pitch_speed, pitch_spin, pitcher_break_x, pitcher_break_z,
+         rv100, run_value,
+         pa:hard_hit_percent, avg_speed) %>% 
+  filter(!is.na(pitch_speed)) %>% 
+  filter(!is.na(pitcher_break_z))
 
 
 # Pitch-by-Pitch Data (9 Pitchers) ####
