@@ -256,25 +256,27 @@ pitchers %>%
   labs(title = "Change in Run Expectancy") +
   NULL
 
+###########
 pitchers %>% 
-  filter(pitch_type == "FF") %>% 
   mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
-  ggplot(aes(x = "", y = woba_value)) +
-  geom_jitter(aes(color = ID), width = 0.25, height = 0, alpha = 0.25) +
-  facet_wrap(~ player_name) +
-  labs(title = "wOBA") +
+  ggplot(aes(x = player_name, y = estimated_woba_using_speedangle)) +
+  geom_boxplot(aes(fill = pitch_name)) +
+  facet_grid(rows = vars(ID), scales = "free") +
+  labs(title = "xwOBA") +
   NULL
 
 
 avg <- pitchers %>% 
   select(player_name, player_id, ID, pitch_type, pitch_speed, pfx_x, pfx_z, 
-         release_spin_rate) %>% 
+         release_spin_rate, estimated_woba_using_speedangle) %>% 
   filter(!is.na(pitch_type)) %>% 
   group_by(player_name, pitch_type) %>% 
   summarize("speed" = mean(pitch_speed, na.rm = TRUE), 
             "_x" = mean(pfx_x, na.rm = TRUE),
             "_z" = mean(pfx_z, na.rm = TRUE), 
-            "spin_rate" = mean(release_spin_rate, na.rm = TRUE)) %>% 
+            "spin_rate" = mean(release_spin_rate, na.rm = TRUE),
+            xwOBA = mean(estimated_woba_using_speedangle, na.rm = TRUE),
+            Pitches = n()) %>% 
   as.data.frame()
 
 
@@ -302,7 +304,7 @@ delta_sl %>%
   ggplot(aes(x = "", y = abs(delta_speed))) +
   geom_boxplot(aes(fill = ID)) +
   geom_jitter(width = 0.075, height = 0, alpha = 0.075) +
-  facet_wrap(~ player_name) +
+  facet_wrap(~ ID+player_name) +
   labs(title = "Absolute Speed Differential (Against Average) for Sliders") +
   NULL
 
@@ -331,5 +333,22 @@ delta_all %>%
   ggplot(aes(x = "", y = `abs(delta_speed)`, color = pitch_type)) +
   geom_jitter(width = 0.25, show.legend = FALSE) +
   facet_wrap(~ ID)
+
+
+pitchers %>% 
+  filter(pitch_type == "FF") %>% 
+  left_join(avg, by = c("player_name", "pitch_type")) %>% 
+  mutate(delta_speed = pitch_speed - speed,
+         delta_mov_x = pfx_x - `_x`,
+         delta_mov_z = pfx_x - `_z`,
+         delta_spin = release_spin_rate - spin_rate) %>% 
+  mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
+  ggplot(aes(x = "", y = delta_speed, color = xwOBA)) +
+  geom_boxplot(aes(fill = ID), color = "black") +
+  geom_jitter(width = 0.075, height = 0, alpha = 0.075) +
+  scale_color_gradient2(low = "green", midpoint = 0.41, high = "red") +
+  facet_wrap(~ player_name) +
+  labs(title = "Speed Differential (Against Average) for Sliders") +
+  NULL
 ```
 
