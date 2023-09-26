@@ -17,56 +17,15 @@ library(knitr)
 ```
 
 ``` {r Data, echo = FALSE, message = FALSE, warning = FALSE}
-data <- read_csv("pitch_arsenals_spin.csv")
+data <- read_csv("CSVs/arsenal.csv")
 
-strider <- read_csv("Strider_9_13_23.csv") %>% 
+pitchers <- read_csv("CSVs/pitcher_comps.csv")
+
+strider <- read_csv("Pitch Level Data/Strider_9_13_23.csv") %>% 
   select(-game_date, -`pitcher...8`, -spin_dir:-break_length_deprecated,
          -game_type, -home_team, -away_team)
-
-stats_2022 <- read_csv("stats.csv")
-
-speed_2022 <- read_csv("pitch_arsenals_mph.csv")
 ```
 
-``` {r Pitcher Data, echo = FALSE, warning = FALSE, message = FALSE}
-# Auto Reading Data
-files <- list.files("Data")
-
-pitchers <- read_csv(paste0("Data/", files[1]))
-
-for(i in 2:length(files)) {
-pitchers <- rbind(pitchers,
-                  read_csv(paste0("Data/",files[i])))
-}
-
-add <- stats_2022 %>% 
-  select(player_id, woba)
-
-pitchers <- pitchers %>% 
-  left_join(add, by = c("pitcher...8" = "player_id")) %>% 
-  mutate(ID = case_when(woba > 0.330 ~ "Bad",
-                        woba < 0.380 ~ "Great",
-                        TRUE ~ "Decent"),
-         win_exp_added = case_when(inning_topbot == "Bot"  ~ -delta_home_win_exp,
-                             inning_topbot == "Top"  ~ delta_home_win_exp),
-         run_exp_added = -delta_run_exp,
-         ra_on_play = post_bat_score - bat_score) %>% 
-  rename(player_id = pitcher...8,
-         hitter = stand,
-         pitch_speed = release_speed)
-
-pitchers <- pitchers %>% 
-  select(ID, player_name, player_id, game_date, pitch_type, pitch_name,
-         pitch_speed, spin_axis, pfx_x:plate_z, ra_on_play,
-         release_pos_x, release_pos_z, bb_type:strikes, pitch_number,
-         hitter, home_team:type, outs_when_up, inning, ra_on_play,
-         run_exp_added, win_exp_added,
-         sz_top, sz_bot, hit_distance_sc:release_extension,
-         estimated_ba_using_speedangle:woba_value, at_bat_number)
-
-pitchers <- pitchers %>% 
-  mutate(pitch_name = str_replace(pitch_name, "4-Seam Fastball", "4-Seam")) 
-```
 
 ``` {r Functions, echo = FALSE}
 # Geom Zone (Jackie's) ####
@@ -92,7 +51,7 @@ geom_plate <- function(pov = "pitcher"){
 ```
 
 
-``` {r Strider EDA Viz}
+``` {r Strider EDA Viz, warning = FALSE}
 # Color / Shape = Pitch
 strider %>% 
   ggplot(aes(x = -plate_x, y = plate_z)) +
@@ -168,7 +127,23 @@ strider %>%
   theme(panel.grid.major = element_blank(),
     panel.grid.minor = element_blank())
 
+strider %>% 
+  mutate(pitch_name = str_replace(pitch_name, "4-Seam Fastball", "4-Seam")) %>% 
+  ggplot(aes(x = -plate_x, y = plate_z)) +
+  geom_zone() +
+  geom_mark_hull(expand = unit(2, "mm"), size = .8, show.legend = FALSE,
+                 color = "gray", alpha = 0.7) +
+  geom_point(aes(color = pitch_name), alpha = 0.75, size = 1.25) +
+  coord_fixed(ratio = 1) +
+  labs(title = "Spencer Strider", 
+       subtitle = "ATL @ PHI - September 13, 2023",
+       x = "", y = "",
+       color = "Pitch Type") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
 
+# Strifer 09/13 Pitch type with cluster outlines
 strider %>% 
   ggplot(aes(x = -plate_x, y = plate_z, color = pitch_type)) +
   geom_zone() +
@@ -210,65 +185,6 @@ strider %>%
   NULL
 ```
 
-```{r Pitcher Prototypes, echo = FALSE}
-
-comps_2022 <- stats_2022 %>% 
-  left_join(speed_2022, c("player_id" = "pitcher")) %>% 
-  select(first_name.x, last_name.x, player_id, woba, ff_avg_speed) %>% 
-  rename(first_name = first_name.x,
-         last_name = last_name.x,
-         FF_speed = ff_avg_speed) %>% 
-  arrange(woba)
-
-# Finding Quantile Values
-
-p10 <- quantile(comps_2022$woba, probs = 0.9)
-p50 <- quantile(comps_2022$woba, probs = 0.5)
-p90 <- quantile(comps_2022$woba, probs = 0.1)
-
-pitchers_10 <- comps_2022 %>% 
-  filter(woba > p10 - 0.010 & woba < p10 + 0.005,
-         FF_speed > 93 & FF_speed < 95) %>% 
-  mutate(ID = "Bad")
-
-pitchers_50 <- comps_2022 %>% 
-  filter(woba > p50 - 0.010 & woba < p50 + 0.005,
-         FF_speed > 93 & FF_speed < 95) %>% 
-  mutate(ID = "Decent")
-
-pitchers_90 <- comps_2022 %>% 
-  filter(woba > p90 - 0.010 & woba < p90 + 0.005,
-         FF_speed > 93.5 & FF_speed < 94.5) %>% 
-  mutate(ID = "Great")
-
-# Making Comps
-
-candidates <- rbind(pitchers_10, pitchers_50, pitchers_90) 
-
-sample <- candidates %>% 
-  filter(player_id %in% c("641745", "621244", "680686",
-                          "677651", "641154", "592791",
-                          "668678", "453286", "666201"))
-
-sample %>% 
-  mutate(Name = paste(first_name, last_name)) %>% 
-  select(ID, Name, player_id, woba, FF_speed) %>% 
-  rename(wOBA = woba,
-         MPH = FF_speed,
-         Group = ID,
-         P_ID = player_id) %>% 
-  kable()
-
-sample %>% 
-  ggplot(aes(x = FF_speed, y = woba, color = ID)) +
-  geom_point() +
-  geom_label(label = sample$last_name, size = 1.25) +
-  xlim(92, 98) +
-  labs(x = "Four-Seam Fastball Average Speed (mph)",
-       y = "2022 Opponent wOBA",
-       color = "Group")
-
-```
 
 ```{r Exporing Pitchers Data, echo = FALSE, warning = FALSE, message = FALSE}
 
