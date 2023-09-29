@@ -8,11 +8,26 @@ library(forcats)
 # 2022 Seasonal Data ####
 
 # Overall Numbers for Pitchers
-# URL: https://baseballsavant.mlb.com/leaderboard/custom?year=2022&type=pitcher&filter=&sort=1&sortDir=desc&min=25&selections=xba,xslg,xwoba,xobp,xiso,exit_velocity_avg,launch_angle_avg,sweet_spot_percent,barrel_batted_rate,&chart=false&x=xba&y=xba&r=no&chartType=beeswarm
-# Downloaded: September 23, 2023
-stats_2022 <- read_csv("Pitcher Seasonal Data/2022_pitcher_stats.csv") %>% 
-  select(-...13)
+# URL: https://baseballsavant.mlb.com/leaderboard/custom?year=2022&type=pitcher&filter=&sort=4&sortDir=asc&min=100&selections=p_game,p_formatted_ip,pa,hit,home_run,strikeout,walk,k_percent,bb_percent,batting_avg,slg_percent,on_base_percent,on_base_plus_slg,babip,p_earned_run,p_win,p_loss,p_era,xba,xslg,woba,xwoba,xobp,wobacon,xwobacon,exit_velocity_avg,launch_angle_avg,sweet_spot_percent,barrel_batted_rate,&chart=false&x=xba&y=xba&r=no&chartType=beeswarm
+# Downloaded: September 29, 2023
+stats_2022 <- read_csv("Pitcher Seasonal Data/2022_stats.csv")
 
+stats_2022 <- stats_2022 %>% 
+  rename(Name = `last_name, first_name`,
+         IP = p_formatted_ip,
+         strikeouts = strikeout,
+         walks = walk,
+         AVG = batting_avg,
+         SLG = slg_percent,
+         OBP = on_base_percent,
+         OPS = on_base_plus_slg,
+         earned_runs = p_earned_run,
+         wins = p_win,
+         losses = p_loss,
+         ERA = p_era,
+         ev_avg = exit_velocity_avg,
+         la_avg = launch_angle_avg) %>% 
+  select(-...33)
 
 # 2022 Pitch Arsenal Data ####
 # Downloaded: September 23, 2023
@@ -192,6 +207,9 @@ sample <- candidates %>%
 
 # Pitch Arsenal CSV
 write.csv(arsenal, "arsenal.csv")
+
+# Pitcher Seasonal Stats CSV
+write.csv(stats_2022, "season_stats.csv")
 
 # Pitch-by-Pitch "Pitchers" CSV
 write.csv(pitchers, "pitcher_comps.csv")
