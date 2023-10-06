@@ -18,51 +18,11 @@ library(forcats)
 ```
 
 ``` {r Data, echo = FALSE, message = FALSE, warning = FALSE}
-data <- read_csv("pitch_arsenals_spin.csv")
+data <- read_csv("CSVs/arsenal.csv")
 
-stats_2022 <- read_csv("stats.csv")
+pitchers <- read_csv("CSVs/pitcher_comps.csv")
 
-speed_2022 <- read_csv("pitch_arsenals_mph.csv")
-```
-
-``` {r Pitcher Data, echo = FALSE, warning = FALSE, message = FALSE}
-# Auto Reading Data
-files <- list.files("Data")
-
-pitchers <- read_csv(paste0("Data/", files[1]))
-
-for(i in 2:length(files)) {
-pitchers <- rbind(pitchers,
-                  read_csv(paste0("Data/",files[i])))
-}
-
-add <- stats_2022 %>% 
-  select(player_id, woba)
-
-pitchers <- pitchers %>% 
-  left_join(add, by = c("pitcher...8" = "player_id")) %>% 
-  mutate(ID = case_when(woba > 0.330 ~ "Bad",
-                        woba < 0.280 ~ "Great",
-                        TRUE ~ "Decent"),
-         win_exp_added = case_when(inning_topbot == "Bot"  ~ -delta_home_win_exp,
-                             inning_topbot == "Top"  ~ delta_home_win_exp),
-         run_exp_added = -delta_run_exp,
-         ra_on_play = post_bat_score - bat_score) %>% 
-  rename(player_id = pitcher...8,
-         hitter = stand,
-         pitch_speed = release_speed)
-
-pitchers <- pitchers %>% 
-  select(ID, player_name, player_id, game_date, pitch_type, pitch_name,
-         pitch_speed, spin_axis, pfx_x:plate_z, ra_on_play,
-         release_pos_x, release_pos_z, bb_type:strikes, pitch_number,
-         hitter, home_team:type, outs_when_up, inning, ra_on_play,
-         run_exp_added, win_exp_added,
-         sz_top, sz_bot, hit_distance_sc:release_extension,
-         estimated_ba_using_speedangle:woba_value, at_bat_number)
-
-pitchers <- pitchers %>% 
-  mutate(pitch_name = str_replace(pitch_name, "4-Seam Fastball", "4-Seam")) 
+arsenal <- read_csv("CSVs/arsenal.csv")
 ```
 
 ``` {r Functions, echo = FALSE}
@@ -88,69 +48,9 @@ geom_plate <- function(pov = "pitcher"){
 }
 ```
 
-```{r Pitcher Prototypes, echo = FALSE}
+```{r Exploring Pitchers Data, echo = FALSE, warning = FALSE, message = FALSE}
 
-comps_2022 <- stats_2022 %>% 
-  left_join(speed_2022, c("player_id" = "pitcher")) %>% 
-  select(first_name.x, last_name.x, player_id, woba, ff_avg_speed) %>% 
-  rename(first_name = first_name.x,
-         last_name = last_name.x,
-         FF_speed = ff_avg_speed) %>% 
-  arrange(woba)
-
-# Finding Quantile Values
-
-p10 <- quantile(comps_2022$woba, probs = 0.9)
-p50 <- quantile(comps_2022$woba, probs = 0.5)
-p90 <- quantile(comps_2022$woba, probs = 0.1)
-
-pitchers_10 <- comps_2022 %>% 
-  filter(woba > p10 - 0.010 & woba < p10 + 0.010,
-         FF_speed > 93 & FF_speed < 95) %>% 
-  mutate(ID = "Bad")
-
-pitchers_50 <- comps_2022 %>% 
-  filter(woba > p50 - 0.010 & woba < p50 + 0.010,
-         FF_speed > 93 & FF_speed < 95) %>% 
-  mutate(ID = "Decent")
-
-pitchers_90 <- comps_2022 %>% 
-  filter(woba > p90 - 0.010 & woba < p90 + 0.010,
-         FF_speed > 93.5 & FF_speed < 94.5) %>% 
-  mutate(ID = "Great")
-
-# Making Comps
-
-candidates <- rbind(pitchers_10, pitchers_50, pitchers_90) 
-
-sample <- candidates %>% 
-  filter(player_id %in% c("641745", "621244", "680686",
-                          "677651", "641154", "592791",
-                          "668678", "453286", "666201"))
-
-sample %>% 
-  mutate(Name = paste(first_name, last_name)) %>% 
-  select(ID, Name, player_id, woba, FF_speed) %>% 
-  rename(wOBA = woba,
-         MPH = FF_speed,
-         Group = ID,
-         P_ID = player_id) %>% 
-  kable()
-
-sample %>% 
-  ggplot(aes(x = FF_speed, y = woba, color = ID)) +
-  geom_point() +
-  geom_label(label = sample$last_name, size = 1.25) +
-  xlim(92, 98) +
-  labs(x = "Four-Seam Fastball Average Speed (mph)",
-       y = "2022 Opponent wOBA",
-       color = "Group")
-
-```
-
-```{r Exporing Pitchers Data, echo = FALSE, warning = FALSE, message = FALSE}
-
-
+# Pablo Lopez All Pitches
 pitchers %>% 
   filter(player_id == "641154") %>% 
   ggplot(aes(x = -pfx_x*12, y = pfx_z*12)) +
@@ -171,6 +71,8 @@ pitchers %>%
     plot.title = element_text(hjust = 0.5),
     plot.subtitle = element_text(hjust = 0.5))
 
+
+# Pablo Lopez Sinkers
 pitchers %>% 
   filter(player_id == "641154",
          pitch_name == "Sinker") %>% 
@@ -193,6 +95,7 @@ pitchers %>%
     plot.subtitle = element_text(hjust = 0.5))
 
 
+# Alek Manoah All Pitches
 pitchers %>% 
   filter(player_id == "666201") %>% 
   ggplot(aes(x = -pfx_x*12, y = pfx_z*12)) +
@@ -212,11 +115,11 @@ pitchers %>%
     panel.grid.minor = element_blank(),
     plot.title = element_text(hjust = 0.5),
     plot.subtitle = element_text(hjust = 0.5))
-
 ```
 
 ```{r Pitcher Comps, echo = FALSE, warning = FALSE, message = FALSE}
 
+# Spin Rate of Four Seams
 pitchers %>% 
   filter(pitch_type == "FF") %>% 
   mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
@@ -229,6 +132,7 @@ pitchers %>%
   NULL
 
 
+# Induced Movement of Four Seams
 pitchers %>% 
   filter(pitch_type == "FF") %>% 
   mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
@@ -239,6 +143,7 @@ pitchers %>%
   NULL
 
 
+# Induced Movement of Pitch Arsenal
 pitchers %>% 
   mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
   ggplot(aes(x = -pfx_x*12, y = pfx_z*12)) +
@@ -247,6 +152,8 @@ pitchers %>%
   labs(title = "Induced Movement of Pitch Arsenal") +
   NULL
 
+
+# Change in Run Expectancy
 pitchers %>% 
   filter(pitch_type == "FF") %>% 
   mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
@@ -256,7 +163,8 @@ pitchers %>%
   labs(title = "Change in Run Expectancy") +
   NULL
 
-###########
+
+# wOBA by pitch by group
 pitchers %>% 
   mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
   ggplot(aes(x = player_name, y = estimated_woba_using_speedangle)) +
@@ -266,6 +174,7 @@ pitchers %>%
   NULL
 
 
+# Making averages dataset
 avg <- pitchers %>% 
   select(player_name, player_id, ID, pitch_type, pitch_speed, pfx_x, pfx_z, 
          release_spin_rate, estimated_woba_using_speedangle) %>% 
@@ -280,6 +189,7 @@ avg <- pitchers %>%
   as.data.frame()
 
 
+# Calculating differences in metrics for sliders
 delta_sl <- pitchers %>% 
   filter(pitch_type == "SL") %>% 
   left_join(avg, by = c("player_name", "pitch_type")) %>% 
@@ -289,6 +199,8 @@ delta_sl <- pitchers %>%
          delta_spin = release_spin_rate - spin_rate) %>% 
   select(-speed:-spin_rate)
 
+
+# Sliders Speed Diff vs. Avg
 delta_sl %>% 
   mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
   ggplot(aes(x = "", y = delta_speed)) +
@@ -298,7 +210,7 @@ delta_sl %>%
   labs(title = "Speed Differential (Against Average) for Sliders") +
   NULL
 
-
+# Sliders Speed Diff vs. Avg (Absolute Value)
 delta_sl %>% 
   mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
   ggplot(aes(x = "", y = abs(delta_speed))) +
@@ -309,7 +221,7 @@ delta_sl %>%
   NULL
 
 
-
+# Calculating differences in metrics for all pitches
 delta_all <- pitchers %>% 
   left_join(avg, by = c("player_name", "pitch_type")) %>% 
   mutate(delta_speed = pitch_speed - speed,
@@ -324,17 +236,22 @@ aggregate(abs(delta_speed) ~ player_name + pitch_type, data = ., FUN = mean) %>%
     player_name  %in% c("Berríos, José", "Gray, Josiah", "Keller, Brad") ~ "Bad"
   ))
 
+
+# Absolute speed differential for all pitches
 delta_all %>% 
   ggplot(aes(x = "", y = `abs(delta_speed)`, color = ID)) +
   geom_jitter(width = 0.25, show.legend = FALSE) +
   facet_wrap(~ ID)
 
+
+# Absolute speed differential for all pitches, colored by pitch
 delta_all %>% 
   ggplot(aes(x = "", y = `abs(delta_speed)`, color = pitch_type)) +
   geom_jitter(width = 0.25, show.legend = FALSE) +
   facet_wrap(~ ID)
 
 
+# Four Seams Speed Diff vs. Avg
 pitchers %>% 
   filter(pitch_type == "FF") %>% 
   left_join(avg, by = c("player_name", "pitch_type")) %>% 
@@ -348,7 +265,63 @@ pitchers %>%
   geom_jitter(width = 0.075, height = 0, alpha = 0.075) +
   scale_color_gradient2(low = "green", midpoint = 0.41, high = "red") +
   facet_wrap(~ player_name) +
-  labs(title = "Speed Differential (Against Average) for Sliders") +
+  labs(title = "Speed Differential (Against Average) for Four Seams") +
   NULL
+```
+
+```{r pitch by pitch investigation}
+
+pitcher_test <- pitchers %>% 
+  mutate(group_indicator = case_when(
+    ID == "Great" ~ 1,
+    ID == "Decent" ~ 2,
+    ID == "Bad" ~ 3))
+
+# Correlation between spin rate and run expectancy
+pitcher_test %>% 
+  filter(!is.na(release_spin_rate) & !is.na(run_exp_added)) %>% 
+  with( cor(release_spin_rate, run_exp_added) )
+
+# Correlation between spin rate and run expectancy
+pitcher_test %>% 
+  filter(!is.na(pitch_speed) & !is.na(run_exp_added)) %>% 
+  with( cor(pitch_speed, run_exp_added) )
+
+# Can batted ball type predict run expectancy?
+lm(run_exp_added ~ bb_type, data = pitcher_test)
+# Intercept = Fly Ball
+
+test_model <- pitcher_test %>% 
+  filter( !(player_name  %in% 
+             c("Scherzer, Max", "Taillon, Jameson", "Berríos, José")) ) %>% 
+lm(run_exp_added ~ bb_type, data = .)
+
+test_testdata <- pitcher_test %>% 
+  filter(player_name  %in% 
+             c("Scherzer, Max", "Taillon, Jameson", "Berríos, José"),
+         !is.na(bb_type)) %>% 
+  select(ID, pitch_type, run_exp_added, bb_type)
+
+test_testdata %>% 
+  mutate(preds = predict(test_model, test_testdata))
+
+# row.names = FALSE
+```
+
+```{r meeting test}
+arsenal %>% 
+  filter(pitch_type == "SL",
+         pitch_hand == "L") %>% 
+  with(cor(sqrt(pitcher_break_x^2 + pitcher_break_z^2), rv100))
+
+pitchers %>% 
+  filter(player_name  %in% "Scherzer, Max",
+         !is.na(bb_type)) %>% 
+  select(ID, pitch_type, run_exp_added, bb_type)
+
+pitchers %>% 
+  filter(pitch_type == "SL",
+         !is.na(pfx_x), !is.na(release_spin_rate)) %>% 
+  with(cor(pfx_x, release_spin_rate))
 ```
 

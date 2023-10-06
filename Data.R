@@ -15,18 +15,22 @@ stats_2022 <- read_csv("Pitcher Seasonal Data/2022_stats.csv")
 stats_2022 <- stats_2022 %>% 
   rename(Name = `last_name, first_name`,
          IP = p_formatted_ip,
-         strikeouts = strikeout,
-         walks = walk,
+         G = p_game,
          AVG = batting_avg,
          SLG = slg_percent,
          OBP = on_base_percent,
          OPS = on_base_plus_slg,
-         earned_runs = p_earned_run,
+         ER = p_earned_run,
          wins = p_win,
          losses = p_loss,
          ERA = p_era,
          ev_avg = exit_velocity_avg,
-         la_avg = launch_angle_avg) %>% 
+         la_avg = launch_angle_avg,
+         PA = pa,
+         HR = home_run,
+         H = hit,
+         K = strikeout,
+         BB = walk) %>% 
   select(-...33)
 
 # 2022 Pitch Arsenal Data ####
@@ -127,9 +131,19 @@ arsenal <- arsenal_stats %>%
          team:pitch_name, pitches, pitch_usage,
          pitch_speed, pitch_spin, pitcher_break_x, pitcher_break_z,
          rv100, run_value,
-         pa:hard_hit_percent, avg_speed) %>% 
+         pa:hard_hit_percent) %>% 
   filter(!is.na(pitch_speed)) %>% 
   filter(!is.na(pitcher_break_z))
+
+arsenal <- arsenal %>% 
+  rename(xBA = est_ba,
+         xSLG = est_slg,
+         xwOBA = est_woba,
+         PA = pa,
+         AVG = ba,
+         SLG = slg,
+         wOBA = woba,
+         spin_rate = pitch_spin)
 
 
 # Pitch-by-Pitch Data (9 Pitchers) ####
@@ -170,10 +184,8 @@ pitchers <- pitchers %>%
 # Making Pitcher Comparions ####
 comps_2022 <- stats_2022 %>% 
   left_join(filter(arsenal_speed, pitch_type == "FF"), c("player_id" = "pitcher")) %>% 
-  select(first_name.x, last_name.x, player_id, woba, pitch_speed) %>% 
-  rename(first_name = first_name.x,
-         last_name = last_name.x,
-         FF_speed = pitch_speed) %>% 
+  select(first_name, last_name, player_id, woba, pitch_speed) %>% 
+  rename(FF_speed = pitch_speed) %>% 
   arrange(woba)
 
 p10 <- quantile(comps_2022$woba, probs = 0.9)
