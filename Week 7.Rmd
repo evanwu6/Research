@@ -296,7 +296,7 @@ summary(lm_scherzer)
 
 
 # Overview of all model combinations
-model_all <- ols_step_all_possible(lm_simple)
+model_all <- ols_step_all_possible(lm_scherzer)
 
 # Stepwise Selection
 lm_scherzer %>% ols_step_both_p(prem = 0.15, pent = 0.15)
@@ -358,3 +358,211 @@ model_results_scherzer %>%
        y = "Predicted",
        color = "Model")
 ```
+
+
+
+```{r Sample Pitch Linear Model, echo = FALSE, warning = FALSE}
+
+# Model Data (Pitch = Slider)
+pitches <- pitchers %>% 
+  filter(pitch_type == "SL") %>% 
+  mutate(pfx_x = pfx_x*12,
+         pfx_z = pfx_z*12,
+         ovr_break = round(sqrt(pfx_x^2 + pfx_z^2), 3))
+
+# Simple Linear Regression
+lm_pitches <- lm(run_exp_added ~ 
+     pitch_speed + release_spin_rate + pfx_x + pfx_z +
+     ovr_break + release_extension,
+  data = pitches)
+
+summary(lm_pitches)
+
+
+# Stepwise Selection
+lm_pitches %>% ols_step_both_p(prem = 0.25, pent = 0.15)
+
+# New Model
+lm1_pitches <- lm(run_exp_added ~ 
+     release_spin_rate + pfx_x + release_extension,
+  data = pitches)
+
+lm1_pitches %>% 
+  summary()
+```
+
+```{r Sample Pitch Linear Model Interactions, echo = FALSE, warning = FALSE}
+# Model Data (Pitch = Slider)
+
+# Interaction Linear Regression
+lm_interact_pitches <- lm(run_exp_added ~ 
+      pitch_speed + release_spin_rate + pfx_x + pfx_z +
+     ovr_break + release_extension +
+       pitch_speed*release_spin_rate + pitch_speed*pfx_x + pitch_speed*pfx_z +
+       pitch_speed*ovr_break + pitch_speed*release_extension + 
+       release_spin_rate*pfx_x + release_spin_rate*pfx_z + 
+       release_spin_rate*ovr_break + release_spin_rate*release_extension +
+       release_extension*pfx_x + release_extension*pfx_z + release_extension*ovr_break,
+  data = pitches)
+
+summary(lm_interact_pitches)
+
+
+# model_interact_all <- ols_step_all_possible(lm_interact)
+
+# Stepwise Selection
+lm_interact_pitches %>% ols_step_both_p(pent = 0.15, prem = 0.15)
+
+lm2_pitches <- lm(run_exp_added ~ 
+     release_spin_rate*pfx_x + release_extension,
+  data = pitches)
+
+lm2_pitches %>% 
+  summary()
+```
+
+```{r Sample Pitch LM Comparisons, echo = FALSE}
+# Comparing Model Predictions
+# lm1 = simple
+# lm2 = interactions available but not used
+
+model_results_pitches <- pitches %>% 
+  select(run_exp_added, pitch_speed, release_spin_rate, pfx_x, pfx_z,
+         release_extension) %>% 
+  mutate(lm1 = predict(lm1_pitches, pitches),
+         lm2 = predict(lm2_pitches, pitches))
+
+# R and RMSE of Simple Linear Model
+
+model_results_pitches %>% 
+  filter(!is.na(release_spin_rate),
+         !is.na(pfx_x),
+         !is.na(release_extension),
+         !is.na(run_exp_added)) %>% 
+  with(cor(run_exp_added, lm1))
+
+model_results_pitches %>% 
+  filter(!is.na(release_spin_rate),
+         !is.na(pfx_x),
+         !is.na(release_extension),
+         !is.na(run_exp_added)) %>% 
+  with(rmse(run_exp_added, lm1))
+
+# R and RMSE of Interaction Linear Model
+model_results_pitches %>% 
+  filter(!is.na(release_spin_rate),
+         !is.na(pfx_x),
+         !is.na(release_extension),
+         !is.na(run_exp_added)) %>% 
+  with(cor(run_exp_added, lm2))
+
+model_results_pitches %>% 
+  filter(!is.na(release_spin_rate),
+         !is.na(pfx_x),
+         !is.na(release_extension),
+         !is.na(run_exp_added)) %>% 
+  with(rmse(run_exp_added, lm2))
+
+# Graph
+model_results_pitches %>% 
+  select(run_exp_added, lm1, lm2) %>%
+  pivot_longer(cols = lm1:lm2, 
+               names_to = "model",
+               values_to = "pred") %>% 
+  mutate(model = str_replace(model, "lm1", "Simple LM"),
+         model = str_replace(model, "lm2", "Interaction LM")) %>%
+  ggplot(aes(x = run_exp_added, y = pred, color = model)) +
+  geom_point(shape = 18, size = 1.5, alpha = 0.75) + 
+  geom_smooth(se = FALSE) +
+  scale_color_manual(values = c("navyblue", "skyblue")) +
+  theme_classic() +
+  labs(title = "Linear Models for Pitch-by-Pitch Data",
+       subtitle = "Predicting Run Expectancy Added",
+       caption = "Pitchers: Scherzer, Taillon, Keller, Manoah, Gallen, Garcia, Gray",
+       x = "Observed",
+       y = "Predicted",
+       color = "Model")
+```
+
+```{r Sample Pitch Linear Model Investigation, echo = FALSE, warning = FALSE}
+model_results_pitches_2 <- pitches %>% 
+  select(run_exp_added, pitch_speed, release_spin_rate, pfx_x, pfx_z,
+         release_extension, ID) %>% 
+  mutate(lm1 = predict(lm1_pitches, pitches),
+         lm2 = predict(lm2_pitches, pitches))
+
+# Graph
+model_results_pitches_2 %>% 
+  select(ID,run_exp_added, lm1, lm2) %>%
+  pivot_longer(cols = lm1:lm2, 
+               names_to = "model",
+               values_to = "pred") %>% 
+  mutate(model = str_replace(model, "lm1", "Simple LM"),
+         model = str_replace(model, "lm2", "Interaction LM")) %>%
+  ggplot(aes(x = run_exp_added, y = pred, color = model)) +
+  geom_point(shape = 18, size = 1.5, alpha = 0.75) + 
+  geom_smooth(se = FALSE) +
+  scale_color_manual(values = c("navyblue", "skyblue")) +
+  facet_wrap(~ ID, ncol = 1) +
+  theme_classic() +
+  labs(title = "Linear Models for Pitch-by-Pitch Data",
+       subtitle = "Predicting Run Expectancy Added",
+       caption = "Pitchers: Scherzer, Taillon, Keller, Manoah, Gallen, Garcia, Gray",
+       x = "Observed",
+       y = "Predicted",
+       color = "Model")
+
+# Correlations
+
+model_results_pitches_2 %>% 
+  filter(ID == "Great") %>% 
+  filter(!is.na(release_spin_rate),
+         !is.na(pfx_x),
+         !is.na(release_extension),
+         !is.na(run_exp_added)) %>% 
+  with(cor(run_exp_added, lm1))
+
+model_results_pitches_2 %>% 
+  filter(ID == "Decent") %>% 
+  filter(!is.na(release_spin_rate),
+         !is.na(pfx_x),
+         !is.na(release_extension),
+         !is.na(run_exp_added)) %>% 
+  with(cor(run_exp_added, lm1))
+
+model_results_pitches_2 %>% 
+  filter(ID == "Bad") %>% 
+  filter(!is.na(release_spin_rate),
+         !is.na(pfx_x),
+         !is.na(release_extension),
+         !is.na(run_exp_added)) %>% 
+  with(cor(run_exp_added, lm1))
+
+
+# RMSE
+
+model_results_pitches_2 %>% 
+  filter(ID == "Great") %>% 
+  filter(!is.na(release_spin_rate),
+         !is.na(pfx_x),
+         !is.na(release_extension),
+         !is.na(run_exp_added)) %>% 
+  with(rmse(run_exp_added, lm1))
+
+model_results_pitches_2 %>% 
+  filter(ID == "Decent") %>% 
+  filter(!is.na(release_spin_rate),
+         !is.na(pfx_x),
+         !is.na(release_extension),
+         !is.na(run_exp_added)) %>% 
+  with(rmse(run_exp_added, lm1))
+
+model_results_pitches_2 %>% 
+  filter(ID == "Bad") %>% 
+  filter(!is.na(release_spin_rate),
+         !is.na(pfx_x),
+         !is.na(release_extension),
+         !is.na(run_exp_added)) %>% 
+  with(rmse(run_exp_added, lm1))
+```
+
