@@ -566,3 +566,73 @@ model_results_pitches_2 %>%
   with(rmse(run_exp_added, lm1))
 ```
 
+```{r}
+pitchers %>% 
+  # filter(pitch_type == "SL") %>%
+  ggplot(aes(x = plate_z)) +
+  geom_histogram(binwidth = 0.15, color = "white")
+
+pitchers %>% 
+  ggplot(aes(x = run_exp_added)) +
+  geom_histogram(binwidth = 0.15, color = "white")
+
+pitchers %>% 
+  filter(pitch_type %in% c("FF", "SL", "CH")) %>%
+  mutate(pitch_dist = sqrt(plate_x^2 + (2.5 - plate_z)^2)) %>% 
+  ggplot(aes(x = pitch_dist, color = ID)) +
+  geom_density() +
+  facet_wrap(~ pitch_type,
+             ncol = 1)
+
+pitchers %>% 
+  filter(pitch_type %in% c("FF", "SL", "CH")) %>%
+  mutate(pitch_dist = sqrt(plate_x^2 + (2.5 - plate_z)^2)) %>%
+  ggplot(aes(x = pitch_dist, y = run_exp_added)) +
+  geom_point(alpha = 0.15)
+```
+
+```{r RHP_FF Linear Model, echo = FALSE, warning = FALSE}
+# Model Data (Pitch = Slider, Pitching Hand = Right)
+rhp_ff_data <- arsenal %>% 
+  filter(pitch_type == "FF",
+         pitch_hand == "R") %>% 
+  mutate(ovr_break = sqrt(pitcher_break_x^2 + pitcher_break_z^2))
+
+# Simple Linear Regression
+lm_ff <- lm(xwOBA ~ 
+     pitch_speed + spin_rate + pitcher_break_x + pitcher_break_z +
+     pitch_usage + ovr_break,
+  data = rhp_ff_data)
+
+summary(lm_ff)
+
+
+# Stepwise Selection
+lm_ff %>% ols_step_both_p(prem = 0.15, pent = 0.15)
+
+# New Model
+lm1_ff <- lm(xwOBA ~ 
+     spin_rate + pitcher_break_x*pitcher_break_z + pitch_speed,
+  data = rhp_ff_data)
+
+lm1_ff %>% 
+  summary()
+
+pitchers %>% 
+  filter(pitch_type == "FF",
+         !is.na(release_spin_rate),
+         !is.na(pitch_speed)) %>% 
+  with(cor(release_spin_rate, pitch_speed))
+
+hi <- pitchers %>% 
+  filter(pitch_type == "FF") %>% 
+  mutate(pitch_dist = sqrt(plate_x^2 + (2.5 - plate_z)^2),
+         pitch_dist_sq = pitch_dist^2)
+
+lm(run_exp_added ~ pitch_dist_sq + pitch_dist + 
+     release_spin_rate,
+   data = hi) %>% 
+  summary()
+
+table(pitchers$pitch_name)
+```

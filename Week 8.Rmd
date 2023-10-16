@@ -1,0 +1,158 @@
+---
+title: "Week 8"
+author: "Evan Wu"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+<br>
+
+##### Libraries
+
+``` {r Libraries, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(readxl)
+library(ggforce)
+library(knitr)
+library(forcats)
+library(olsrr)
+library(ranger)
+library(Metrics)
+
+set.seed(3630)
+```
+
+``` {r Data, echo = FALSE, message = FALSE, warning = FALSE}
+seasonal <- read_csv("CSVs/season_stats.csv")
+
+pitchers <- read_csv("CSVs/pitcher_comps.csv")
+
+arsenal <- read_csv("CSVs/arsenal.csv")
+```
+
+``` {r Functions, echo = FALSE}
+# Geom Zone (Jackie's) ####
+
+geom_zone <- function(top = 11/3, bottom = 3/2, linecolor = "black"){
+  geom_rect(xmin = -.7083, xmax = .7083, ymin = bottom, ymax = top,
+            alpha = 0, color = linecolor, linewidth = 0.75)
+}
+
+# c(0, 0, -.25, -.5, -.25))
+
+geom_plate <- function(pov = "pitcher"){
+   df <- case_when(
+     pov == "pitcher" ~ 
+       data.frame(x = c(-.7083, .7083, .7083 ,0, -.7083), y = c(0, 0, .25, .5, .25)),
+     pov == "catcher" ~ 
+       data.frame(x = c(-.7083, .7083, .7083 ,0, -.7083), y = c(0, 0, -.25, -.5, -.25))
+   )
+  
+   g <- geom_polygon(data = df, aes(x = x, y = y), fill = "white", color = "black", linewidth = 1.25)
+  g
+}
+```
+
+```{r Data Modification}
+# Strike / Ball
+pitchers2 <- pitchers %>% 
+  mutate(zone = ifelse(plate_z >= (sz_bot - 1.45/12) &
+                                    plate_z <= (sz_top + 1.45/12) &
+                                    abs(plate_x) <= (17+1.45)/12/2 ,
+                                    "1", "0"))
+
+# Creating distance from center variable
+pitchers2 <- pitchers2 %>% 
+  filter(pitch_type != "Pitch Out",
+         !is.na(pitch_type)) %>% 
+  mutate(
+    loc_x = abs(plate_x),
+    loc_y = abs(plate_z - (sz_top + sz_bot) / 2),
+    dist = sqrt(loc_x^2 + loc_y^2))
+
+# Creating speed change variable
+pitchers2 <- pitchers2 %>% 
+  mutate(speed_change = pitch_speed - mean(pitch_speed), 
+         .by = c(pitch_type, game_date, player_id) )
+
+# Creating break change variable
+pitchers2 <- pitchers2 %>% 
+  mutate(pfx_total = sqrt(pfx_x^2 + pfx_z^2)) %>% 
+  mutate(break_change = pfx_total - mean(pfx_total), 
+         .by = c(pitch_type, game_date, player_id) )
+```
+
+```{r Distribution of New Variables, echo = FALSE}
+# Distance from Center
+avg_dist <- pitchers2 %>% 
+  filter(zone == 1) %>% 
+  summarize(mean(dist))
+avg_dist <- avg_dist$`mean(dist)`[1]
+
+pitchers2 %>% 
+  ggplot(aes(x = dist)) +
+  geom_histogram(color = "white", binwidth = 0.1)+
+  geom_vline(xintercept = avg_dist, color = "green")
+
+# Delta Break
+pitchers2 %>% 
+  ggplot(aes(x = break_change*12)) +
+  geom_histogram(color = "white", binwidth = 0.5)
+
+# Delta Speed
+pitchers2 %>% 
+  ggplot(aes(x = speed_change), alpha = 0.5) +
+  geom_histogram(color = "white", binwidth = 0.25)
+
+###########
+
+# Distance vs. RE
+pitchers2 %>% 
+  ggplot(aes(x = dist, y = run_exp_added)) +
+  geom_point(alpha = 0.25) +
+  geom_smooth(se = FALSE) +
+  facet_wrap(~pitch_type)
+
+# Delta Break vs. RE
+pitchers2 %>% 
+  ggplot(aes(x = break_change, y = run_exp_added)) +
+  geom_point(alpha = 0.25) +
+  geom_smooth(se = FALSE) +
+  facet_wrap(~pitch_type)
+
+# Delta Speed vs. RE
+pitchers2 %>% 
+  ggplot(aes(x = speed_change, y = run_exp_added)) +
+  geom_point(alpha = 0.25) +
+  geom_smooth(se = FALSE) +
+  facet_wrap(~pitch_type)
+
+# Model?
+model <- lm(run_exp_added ~ dist + speed_change + break_change, 
+            data = pitchers2)
+
+preds <- pitchers2 %>% 
+  mutate(predicted = predict(model, pitchers2)) %>% 
+  rename(observed = run_exp_added) %>% 
+  select(ID, zone, pitch_type, observed, predicted) %>% 
+  filter(pitch_type != "PO")
+
+preds %>% 
+  ggplot(aes(x = observed, y = predicted)) +
+  geom_point() +
+  geom_smooth()
+
+acc <- preds %>% 
+  ggplot(aes(x = observed, y = predicted)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth()
+
+acc
+
+acc +
+  facet_wrap(~ pitch_type)
+
+acc +
+  facet_wrap(~ ID)
+```
+
