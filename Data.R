@@ -215,6 +215,45 @@ sample <- candidates %>%
                           "668678", "453286", "666201"))
 
 
+# Bases Empty Dataset ####
+
+files <- list.files("Pitch Level Data/Pitcher Comps 2022/")
+
+p <- read_csv(paste0("Pitch Level Data/Pitcher Comps 2022/", files[1]))
+
+for(i in 2:length(files)) {
+  p <- rbind(p,
+             read_csv(paste0("Pitch Level Data/Pitcher Comps 2022/",files[i])))
+}
+
+add <- seasonal %>% 
+  select(player_id, woba)
+
+p <- p %>% 
+  left_join(add, by = c("pitcher...8" = "player_id")) %>% 
+  mutate(ID = case_when(woba > 0.330 ~ "Bad",
+                        woba < 0.280 ~ "Great",
+                        TRUE ~ "Decent"),
+         win_exp_added = case_when(inning_topbot == "Bot"  ~ -delta_home_win_exp,
+                                   inning_topbot == "Top"  ~ delta_home_win_exp),
+         run_exp_added = -delta_run_exp,
+         ra_on_play = post_bat_score - bat_score) %>% 
+  rename(player_id = pitcher...8,
+         hitter = stand,
+         pitch_speed = release_speed)
+
+empty <- p %>% 
+  filter(is.na(on_3b) & is.na(on_2b) & is.na(on_1b)) %>% 
+  select(ID, player_name, player_id, game_date, pitch_type, pitch_name,
+         pitch_speed, spin_axis, pfx_x:plate_z, ra_on_play,
+         release_pos_x, release_pos_z, bb_type:strikes, pitch_number,
+         hitter, home_team:type, outs_when_up, inning, ra_on_play,
+         run_exp_added, win_exp_added,
+         sz_top, sz_bot, hit_distance_sc:release_extension,
+         estimated_ba_using_speedangle:woba_value, at_bat_number) %>% 
+  mutate(pitch_name = str_replace(pitch_name, "4-Seam Fastball", "4-Seam"))
+
+
 # CSV Exports ####
 
 # Pitch Arsenal CSV
@@ -225,3 +264,6 @@ write.csv(stats_2022, "season_stats.csv")
 
 # Pitch-by-Pitch "Pitchers" CSV
 write.csv(pitchers, "pitcher_comps.csv")
+
+# Bases Empty CSV
+write.csv(empty, "bases_empty.csv")

@@ -18,9 +18,11 @@ library(forcats)
 library(olsrr)
 library(ranger)
 library(Metrics)
+library(mgcv)
 
 set.seed(3630)
 ```
+
 
 ``` {r Data, echo = FALSE, message = FALSE, warning = FALSE}
 seasonal <- read_csv("CSVs/season_stats.csv")
@@ -28,6 +30,8 @@ seasonal <- read_csv("CSVs/season_stats.csv")
 pitchers <- read_csv("CSVs/pitcher_comps.csv")
 
 arsenal <- read_csv("CSVs/arsenal.csv")
+
+empty <- read_csv("CSVs/bases_empty.csv")
 ```
 
 ``` {r Functions, echo = FALSE}
@@ -82,7 +86,7 @@ pitchers2 <- pitchers2 %>%
          .by = c(pitch_type, game_date, player_id) )
 ```
 
-```{r Distribution of New Variables, echo = FALSE}
+```{r Distribution of New Variables, echo = FALSE, warning = FALSE, message = FALSE}
 # Distance from Center
 avg_dist <- pitchers2 %>% 
   filter(zone == 1) %>% 
@@ -92,41 +96,57 @@ avg_dist <- avg_dist$`mean(dist)`[1]
 pitchers2 %>% 
   ggplot(aes(x = dist)) +
   geom_histogram(color = "white", binwidth = 0.1)+
-  geom_vline(xintercept = avg_dist, color = "green")
+  geom_vline(xintercept = avg_dist, color = "green") +
+   labs(x = "Distance from Center (ft)",
+       title = "Distance from Center Distribution")
 
 # Delta Break
 pitchers2 %>% 
   ggplot(aes(x = break_change*12)) +
-  geom_histogram(color = "white", binwidth = 0.5)
+  geom_histogram(color = "white", binwidth = 0.5) +
+  labs(x = "Change in Break (in.)",
+       title = "Change in Break Distribution",
+       subtitle = "Change computed versus the average of a given pitch type for a given date.")
 
 # Delta Speed
 pitchers2 %>% 
   ggplot(aes(x = speed_change), alpha = 0.5) +
-  geom_histogram(color = "white", binwidth = 0.25)
+  geom_histogram(color = "white", binwidth = 0.25) +
+  labs(x = "Change in Speed (mph)",
+       title = "Change in Speed Distribution",
+       subtitle = "Change computed versus the average of a given pitch type for a given date.")
 
 ###########
 
 # Distance vs. RE
 pitchers2 %>% 
-  ggplot(aes(x = dist, y = run_exp_added)) +
+  ggplot(aes(x = dist, y = run_exp_added, color = pitch_name)) +
   geom_point(alpha = 0.25) +
-  geom_smooth(se = FALSE) +
-  facet_wrap(~pitch_type)
+  geom_smooth(se = FALSE, color = "black") +
+  facet_wrap(~pitch_name) +
+  labs(x = "Distance from Center (ft)",
+       title = "Run Expectancy by Distance from Center")
 
 # Delta Break vs. RE
 pitchers2 %>% 
-  ggplot(aes(x = break_change, y = run_exp_added)) +
+  ggplot(aes(x = break_change, y = run_exp_added, color = pitch_name)) +
   geom_point(alpha = 0.25) +
-  geom_smooth(se = FALSE) +
-  facet_wrap(~pitch_type)
+  geom_smooth(se = FALSE, color = "black") +
+  facet_wrap(~pitch_name) +
+  labs(x = "Change in Break (in.)",
+       title = "Run Expectancy by Change in Break")
 
 # Delta Speed vs. RE
 pitchers2 %>% 
-  ggplot(aes(x = speed_change, y = run_exp_added)) +
+  ggplot(aes(x = speed_change, y = run_exp_added, color = pitch_name)) +
   geom_point(alpha = 0.25) +
-  geom_smooth(se = FALSE) +
-  facet_wrap(~pitch_type)
+  geom_smooth(se = FALSE, color = "black") +
+  facet_wrap(~pitch_name) +
+  labs(x = "Change in Speed (mph)",
+       title = "Run Expectancy by Change in Speed")
+```
 
+```{r Model}
 # Model?
 model <- lm(run_exp_added ~ dist + speed_change + break_change, 
             data = pitchers2)
@@ -136,11 +156,6 @@ preds <- pitchers2 %>%
   rename(observed = run_exp_added) %>% 
   select(ID, zone, pitch_type, observed, predicted) %>% 
   filter(pitch_type != "PO")
-
-preds %>% 
-  ggplot(aes(x = observed, y = predicted)) +
-  geom_point() +
-  geom_smooth()
 
 acc <- preds %>% 
   ggplot(aes(x = observed, y = predicted)) +
@@ -154,5 +169,124 @@ acc +
 
 acc +
   facet_wrap(~ ID)
+```
+
+```{r FF Model, echo = FALSE, warning = FALSE, message = FALSE}
+data_ff <- pitchers2 %>% 
+  filter(pitch_type == "FF",
+         !is.na(break_change))
+
+model_ff <- ranger(run_exp_added ~ dist + speed_change + break_change, 
+            data = data_ff, mtry = 2)
+
+preds_ff <- data_ff %>% 
+  mutate(predicted = predict(model_ff, data_ff)$predictions) %>% 
+  rename(observed = run_exp_added) %>% 
+  select(ID, zone, pitch_type, observed, predicted) %>% 
+  filter(pitch_type != "PO")
+
+preds_ff %>% 
+  ggplot(aes(x = observed, y = predicted)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Fastball RF Model",
+       caption = paste0("RMSE: ", round(rmse(preds_ff$observed, preds_ff$predicted), 4)))
+
+preds_ff %>% 
+  filter(!is.na(observed),
+         !is.na(predicted)) %>% 
+  with(cor(observed, predicted))
+```
+
+
+```{r SI Model, echo = FALSE, warning = FALSE, message = FALSE}
+data_si <- pitchers2 %>% 
+  filter(pitch_type == "SI",
+         !is.na(break_change))
+
+model_si <- ranger(run_exp_added ~ dist + speed_change + break_change, 
+            data = data_si, mtry = 2)
+
+preds_si <- data_si %>% 
+  mutate(predicted = predict(model_si, data_si)$predictions) %>% 
+  rename(observed = run_exp_added) %>% 
+  select(ID, zone, pitch_type, observed, predicted) %>% 
+  filter(pitch_type != "PO")
+
+preds_si %>% 
+  ggplot(aes(x = observed, y = predicted)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Sinker RF Model",
+       caption = paste0("RMSE: ", round(rmse(preds_si$observed, preds_si$predicted), 4)))
+
+preds_si %>% 
+  filter(!is.na(observed),
+         !is.na(predicted)) %>% 
+  with(cor(observed, predicted))
+```
+
+
+```{r CH Model, echo = FALSE, warning = FALSE, message = FALSE}
+data_ch <- pitchers2 %>% 
+  filter(pitch_type == "CH",
+         !is.na(break_change))
+
+model_ch <- ranger(run_exp_added ~ dist + speed_change + break_change, 
+            data = data_ch, mtry = 2)
+
+preds_ch <- data_ch %>% 
+  mutate(predicted = predict(model_ch, data_ch)$predictions) %>% 
+  rename(observed = run_exp_added) %>% 
+  select(ID, zone, pitch_type, observed, predicted) %>% 
+  filter(pitch_type != "PO")
+
+preds_ch %>% 
+  ggplot(aes(x = observed, y = predicted)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Change-Up RF Model",
+       caption = paste0("RMSE: ", round(rmse(preds_ch$observed, preds_ch$predicted), 4)))
+
+preds_ch %>% 
+  filter(!is.na(observed),
+         !is.na(predicted)) %>% 
+  with(cor(observed, predicted))
+```
+
+
+```{r SL Model, echo = FALSE, warning = FALSE, message = FALSE}
+data_sl <- pitchers2 %>% 
+  filter(pitch_type == "SL",
+         !is.na(break_change))
+
+model_sl <- ranger(run_exp_added ~ dist + speed_change + break_change, 
+            data = data_sl, mtry = 2)
+
+preds_sl <- data_sl %>% 
+  mutate(predicted = predict(model_sl, data_sl)$predictions) %>% 
+  rename(observed = run_exp_added) %>% 
+  select(ID, zone, pitch_type, observed, predicted) %>% 
+  filter(pitch_type != "PO")
+
+preds_sl %>% 
+  ggplot(aes(x = observed, y = predicted)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Slider RF Model",
+       caption = paste0("RMSE: ", round(rmse(preds_sl$observed, preds_sl$predicted), 4)))
+
+preds_sl %>% 
+  filter(!is.na(observed),
+         !is.na(predicted)) %>% 
+  with(cor(observed, predicted))
+```
+
+```{r}
+empty %>% 
+  ggplot(aes(x = run_exp_added)) +
+  geom_histogram(color = "white", binwidth = 0.025) +
+   labs(x = "Run Expectancy Added",
+       title = "RE Added for Bases Empty Pitches")
 ```
 
