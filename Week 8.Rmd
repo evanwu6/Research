@@ -2,7 +2,9 @@
 title: "Week 8"
 author: "Evan Wu"
 date: "`r Sys.Date()`"
-output: html_document
+output: 
+  html_document:
+    code_folding: hide
 ---
 
 <br>
@@ -19,12 +21,13 @@ library(olsrr)
 library(ranger)
 library(Metrics)
 library(mgcv)
+library(caret)
 
 set.seed(3630)
 ```
 
 
-``` {r Data, echo = FALSE, message = FALSE, warning = FALSE}
+``` {r Data, message = FALSE, warning = FALSE}
 seasonal <- read_csv("CSVs/season_stats.csv")
 
 pitchers <- read_csv("CSVs/pitcher_comps.csv")
@@ -34,7 +37,7 @@ arsenal <- read_csv("CSVs/arsenal.csv")
 empty <- read_csv("CSVs/bases_empty.csv")
 ```
 
-``` {r Functions, echo = FALSE}
+``` {r Functions, }
 # Geom Zone (Jackie's) ####
 
 geom_zone <- function(top = 11/3, bottom = 3/2, linecolor = "black"){
@@ -86,7 +89,7 @@ pitchers2 <- pitchers2 %>%
          .by = c(pitch_type, game_date, player_id) )
 ```
 
-```{r Distribution of New Variables, echo = FALSE, warning = FALSE, message = FALSE}
+```{r Distribution of New Variables, warning = FALSE, message = FALSE}
 # Distance from Center
 avg_dist <- pitchers2 %>% 
   filter(zone == 1) %>% 
@@ -146,7 +149,7 @@ pitchers2 %>%
        title = "Run Expectancy by Change in Speed")
 ```
 
-```{r Model}
+```{r Model, warning = FALSE, message = FALSE}
 # Model?
 model <- lm(run_exp_added ~ dist + speed_change + break_change, 
             data = pitchers2)
@@ -171,7 +174,43 @@ acc +
   facet_wrap(~ ID)
 ```
 
-```{r FF Model, echo = FALSE, warning = FALSE, message = FALSE}
+```{r CV FF Model, warning = FALSE, message = FALSE}
+data_ff <- pitchers2 %>% 
+  filter(pitch_type == "FF",
+         !is.na(break_change))
+
+model_ff <- train(
+  run_exp_added ~ dist + speed_change + break_change + pitch_speed + pfx_x + pfx_z,
+  data = data_ff,
+  method = "ranger",
+  trControl = trainControl(method = "cv", number = 5))
+
+preds_ff <- cbind(data_ff, predict(model_ff)) %>% 
+  as.data.frame() %>% 
+  rename(observed = run_exp_added,
+         predicted = "predict(model_ff)") %>% 
+  select(ID, zone, pitch_type, observed, predicted) %>%  
+  filter(pitch_type != "PO")
+
+preds_ff %>% 
+  ggplot(aes(x = observed, y = predicted)) +
+  geom_point() +
+  geom_smooth() +
+  geom_abline(slope = 1, intercept = 0) +
+  coord_fixed() +
+  labs(title = "Fastball RF Model",
+       caption = paste0("RMSE: ", round(rmse(preds_ff$observed, preds_ff$predicted), 4)))
+
+preds_ff %>% 
+  filter(!is.na(observed),
+         !is.na(predicted)) %>% 
+  with(cor(observed, predicted))
+
+
+
+```
+
+```{r FF Model, warning = FALSE, message = FALSE}
 data_ff <- pitchers2 %>% 
   filter(pitch_type == "FF",
          !is.na(break_change))
@@ -199,7 +238,7 @@ preds_ff %>%
 ```
 
 
-```{r SI Model, echo = FALSE, warning = FALSE, message = FALSE}
+```{r SI Model, warning = FALSE, message = FALSE}
 data_si <- pitchers2 %>% 
   filter(pitch_type == "SI",
          !is.na(break_change))
@@ -227,7 +266,7 @@ preds_si %>%
 ```
 
 
-```{r CH Model, echo = FALSE, warning = FALSE, message = FALSE}
+```{r CH Model, warning = FALSE, message = FALSE}
 data_ch <- pitchers2 %>% 
   filter(pitch_type == "CH",
          !is.na(break_change))
@@ -255,7 +294,7 @@ preds_ch %>%
 ```
 
 
-```{r SL Model, echo = FALSE, warning = FALSE, message = FALSE}
+```{r SL Model, warning = FALSE, message = FALSE}
 data_sl <- pitchers2 %>% 
   filter(pitch_type == "SL",
          !is.na(break_change))
@@ -280,6 +319,12 @@ preds_sl %>%
   filter(!is.na(observed),
          !is.na(predicted)) %>% 
   with(cor(observed, predicted))
+
+# 
+# Actmodel <- train(run_exp_added ~ dist + speed_change + break_change,
+#                   data = data_sl, method = "ranger", 
+#                   trControl = trainControl(method = "cv", number = 10, verboseIter = TRUE), preProcess = c("knnImpute"))
+# plot(Actmodel$finalModel$forest)
 ```
 
 ```{r}

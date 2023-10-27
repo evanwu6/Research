@@ -23,6 +23,7 @@ data <- read_csv("CSVs/arsenal.csv")
 pitchers <- read_csv("CSVs/pitcher_comps.csv")
 
 arsenal <- read_csv("CSVs/arsenal.csv")
+
 ```
 
 ``` {r Functions, echo = FALSE}
@@ -323,5 +324,25 @@ pitchers %>%
   filter(pitch_type == "SL",
          !is.na(pfx_x), !is.na(release_spin_rate)) %>% 
   with(cor(pfx_x, release_spin_rate))
+```
+
+```{r Averages}
+
+avgs <- arsenal %>% 
+  group_by(pitch_name) %>% 
+  summarize(Speed = round(weighted.mean(pitch_speed, pitch_usage*pitches), 1),
+            "Spin Rate" = round(weighted.mean(spin_rate, pitch_usage*pitches), 0),
+            "H. Break (in.)" = round(weighted.mean(pitcher_break_x, pitch_usage*pitches), 1),
+            "V. Break (in.)" = round(weighted.mean(pitcher_break_z, pitch_usage*pitches), 1),
+            wOBA = round(weighted.mean(wOBA, pitch_usage*pitches), 3),
+            "Whiff Rate" = round(weighted.mean(whiff_percent, pitch_usage*pitches), 1),
+            "Hard Hit Rate" = round(weighted.mean(hard_hit_percent, pitch_usage*pitches), 1)) %>% 
+  as.data.frame() %>% 
+  mutate("Whiff Rate" = paste0(`Whiff Rate`, "%"),
+         "Hard Hit Rate" = paste0(`Hard Hit Rate`, "%")) %>% 
+  rename(Pitch = pitch_name)
+
+avgs %>% 
+  kable()
 ```
 
