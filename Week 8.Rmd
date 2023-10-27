@@ -177,7 +177,8 @@ acc +
 ```{r CV FF Model, warning = FALSE, message = FALSE}
 data_ff <- pitchers2 %>% 
   filter(pitch_type == "FF",
-         !is.na(break_change))
+         !is.na(break_change)) %>%  
+  filter(pitch_type != "PO")
 
 model_ff <- train(
   run_exp_added ~ dist + speed_change + break_change + pitch_speed + pfx_x + pfx_z,
@@ -189,8 +190,7 @@ preds_ff <- cbind(data_ff, predict(model_ff)) %>%
   as.data.frame() %>% 
   rename(observed = run_exp_added,
          predicted = "predict(model_ff)") %>% 
-  select(ID, zone, pitch_type, observed, predicted) %>%  
-  filter(pitch_type != "PO")
+  select(ID, zone, pitch_type, observed, predicted)
 
 preds_ff %>% 
   ggplot(aes(x = observed, y = predicted)) +

@@ -1,0 +1,26 @@
+---
+title: "Week 11"
+author: "Evan Wu"
+date: "`r Sys.Date()`"
+output: html_document
+  html_document:
+    code_folding: hide
+---
+
+```{r}
+pitchers <- read_csv("CSVs/pitcher_comps.csv")
+
+whiff <- pitchers %>% 
+  mutate(whiff = description == "swinging_strike",
+         whiff = as.character(whiff))
+
+whiff %>% 
+  filter(pitch_type == "FF") %>% 
+  ggplot(aes(x = whiff, y = pitch_speed)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5) +
+  # facet_wrap(~ inning) +
+  NULL
+  
+```
+

@@ -177,7 +177,8 @@ pitchers <- pitchers %>%
          hitter, home_team:type, outs_when_up, inning, ra_on_play,
          run_exp_added, win_exp_added,
          sz_top, sz_bot, hit_distance_sc:release_extension,
-         estimated_ba_using_speedangle:woba_value, at_bat_number) %>% 
+         estimated_ba_using_speedangle:woba_value, at_bat_number, 
+         description, events, des, on_3b:on_1b, outs_when_up) %>% 
   mutate(pitch_name = str_replace(pitch_name, "4-Seam Fastball", "4-Seam")) 
 
 
