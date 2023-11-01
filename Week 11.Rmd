@@ -1,26 +1,188 @@
 ---
 title: "Week 11"
 author: "Evan Wu"
-date: "`r Sys.Date()`"
-output: html_document
+output: 
   html_document:
     code_folding: hide
 ---
 
-```{r}
-pitchers <- read_csv("CSVs/pitcher_comps.csv")
+
+#### Libraries
+```{r Libraries, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(readxl)
+library(knitr)
+library(ranger)
+library(glmnet)
+library(forcats)
+library(olsrr)
+library(Metrics)
+library(mgcv)
+library(caret)
+```
+
+
+#### Data
+```{r Data, message = FALSE, warning = FALSE}
+pitchers <- read_csv("CSVs/pitcher_comps.csv") %>% 
+# Modifying Pitchers
+  # Speed Change Variable
+  mutate(speed_change = pitch_speed - mean(pitch_speed), 
+         .by = c(pitch_type, game_date, player_id) ) %>% 
+  # Total Break Variable
+  mutate(pfx_total = sqrt(pfx_x^2 + pfx_z^2)) %>% 
+  # Speed Change Variable
+  mutate(break_change = pfx_total - mean(pfx_total), 
+         .by = c(pitch_type, game_date, player_id) ) %>% 
+  # Distance From Center Variable
+  mutate(distance = sqrt(plate_x^2 + (plate_z - (sz_top - sz_bot)/2)^2)) %>% 
+  # Simplify Base State Variables
+  mutate(
+    on_3b = case_when(
+      on_3b > 0 ~ 1,
+      TRUE ~ 0),
+    on_2b = case_when(
+      on_2b > 0 ~ 1,
+      TRUE ~ 0),
+    on_1b = case_when(
+      on_1b > 0 ~ 1,
+      TRUE ~ 0)
+    ) %>% 
+  # Base / Out State Variable
+  mutate(base_out = paste0(outs_when_up, "_", on_1b, on_2b, on_3b)) %>% 
+  select(-...1, -home_team, -away_team)
 
 whiff <- pitchers %>% 
   mutate(whiff = description == "swinging_strike",
-         whiff = as.character(whiff))
+         whiff = as.character(whiff)) %>% 
+  filter(pitch_type != "NA",
+         pitch_type != "PO")
 
-whiff %>% 
-  filter(pitch_type == "FF") %>% 
-  ggplot(aes(x = whiff, y = pitch_speed)) +
-  geom_violin() +
-  geom_boxplot(alpha = 0.5) +
-  # facet_wrap(~ inning) +
-  NULL
-  
 ```
 
+
+#### Variable Exploration by Whiff
+``` {r Whiff Exploration, warning = FALSE}
+
+# Pitch Speed
+whiff %>% 
+  ggplot(aes(y = whiff, x = pitch_speed, color = pitch_name)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~pitch_name) +
+  labs(title = "Whiff vs. Non-Whiff by Pitch Speed",
+       x = "Pitch Speed (mph)",
+       y = "Outcome",
+       color = "Pitch Type") +
+  NULL
+
+
+# Horizontal Movement
+whiff %>% 
+  ggplot(aes(y = whiff, x = pfx_x*12, color = pitch_name)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~pitch_name) +
+  labs(title = "Whiff vs. Non-Whiff by Horizontal Movement",
+       x = "Horizontal Movement (in.)",
+       y = "Outcome",
+       color = "Pitch Type") +
+  NULL
+
+
+# Vertical Movement
+whiff %>% 
+  ggplot(aes(y = whiff, x = pfx_z*12, color = pitch_name)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~pitch_name) +
+  labs(title = "Whiff vs. Non-Whiff by Vertical Movement",
+       x = "Induced Vertical Movement (in.)",
+       y = "Outcome",
+       color = "Pitch Type") +
+  NULL
+
+
+# Horizontal Pitch Location
+whiff %>% 
+  ggplot(aes(y = whiff, x = plate_x, color = pitch_name)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~pitch_name) +
+  labs(title = "Whiff vs. Non-Whiff by Horizontal Pitch Location",
+       x = "Horizontal Pitch Location (ft)",
+       y = "Outcome",
+       color = "Pitch Type") +
+  NULL
+
+
+# Vertical Pitch Location
+whiff %>% 
+  ggplot(aes(y = whiff, x = plate_z, color = pitch_name)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~pitch_name) +
+  labs(title = "Whiff vs. Non-Whiff by Vertical Pitch Location",
+       x = "Vertical Pitch Location (ft)",
+       y = "Outcome",
+       color = "Pitch Type") +
+  NULL
+
+
+# Spin Rate
+whiff %>% 
+  ggplot(aes(y = whiff, x = release_spin_rate, color = pitch_name)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~pitch_name) +
+  labs(title = "Whiff vs. Non-Whiff by Spin Rate",
+       x = "Spin Rate (rpm)",
+       y = "Outcome",
+       color = "Pitch Type") +
+  NULL
+
+```
+
+
+#### Logistic Regression
+``` {r Basic Logistic, warning = FALSE, message = FALSE}
+
+# Slider Logistic Model
+whiff_sl <- whiff %>% 
+  filter(pitch_type == "SL") %>% 
+  mutate(whiff = str_replace(whiff, "TRUE", "1"),
+         whiff = str_replace(whiff, "FALSE", "0"),
+         whiff = as.numeric(whiff))
+
+# Original Model
+model1 <- glm(whiff ~ pitch_speed + spin_axis + pfx_x + pfx_z + plate_x + plate_z +
+              release_spin_rate + speed_change + break_change + pfx_total + distance,
+              data = whiff_sl, family = binomial)
+
+model1 <- glm(whiff ~ pitch_speed + plate_x + plate_z +
+              release_spin_rate + speed_change + break_change + pfx_total + distance,
+              data = whiff_sl)
+
+summary(model1)
+
+preds <- whiff_sl %>% 
+  mutate(prediction = predict(model1, whiff_sl)) %>% 
+  filter(!is.na(prediction))
+
+preds %>% 
+  ggplot(aes(x = as.character(whiff), y = prediction)) +
+  geom_boxplot() +
+  geom_jitter(alpha = 0.1, width = 0.1, height = 0)
+
+preds %>% 
+  mutate(prediction = round(prediction, 2)) %>% 
+  group_by(prediction) %>% 
+  summarize(mean(whiff)) %>% 
+  as.data.frame() %>% 
+  ggplot(aes(x = prediction, y = `mean(whiff)`)) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  labs("% of whiff observed")
+
+
+```
