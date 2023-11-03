@@ -159,6 +159,7 @@ model1 <- glm(whiff ~ pitch_speed + spin_axis + pfx_x + pfx_z + plate_x + plate_
               release_spin_rate + speed_change + break_change + pfx_total + distance,
               data = whiff_sl, family = binomial)
 
+# Reduced Model
 model1 <- glm(whiff ~ pitch_speed + plate_x + plate_z +
               release_spin_rate + speed_change + break_change + pfx_total + distance,
               data = whiff_sl)
@@ -166,7 +167,12 @@ model1 <- glm(whiff ~ pitch_speed + plate_x + plate_z +
 summary(model1)
 
 preds <- whiff_sl %>% 
-  mutate(prediction = predict(model1, whiff_sl)) %>% 
+  mutate(prediction_log = predict(model1, whiff_sl),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
   filter(!is.na(prediction))
 
 preds %>% 
@@ -182,7 +188,8 @@ preds %>%
   ggplot(aes(x = prediction, y = `mean(whiff)`)) +
   geom_point() +
   geom_smooth(se = FALSE) +
-  labs("% of whiff observed")
-
-
+  labs(y = "observed whiff proportion",
+       x = "projected % whiff chance",
+       title = "Whiff proportion by predicted whiff value",
+       subtitle = "Whiff predictions have a 1% bin width")
 ```
