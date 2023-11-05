@@ -22,6 +22,29 @@ library(caret)
 ```
 
 
+``` {r Functions, }
+# Geom Zone (Jackie's) ####
+
+geom_zone <- function(top = 11/3, bottom = 3/2, linecolor = "black"){
+  geom_rect(xmin = -.7083, xmax = .7083, ymin = bottom, ymax = top,
+            alpha = 0, color = linecolor, linewidth = 0.75)
+}
+
+# c(0, 0, -.25, -.5, -.25))
+
+geom_plate <- function(pov = "pitcher"){
+   df <- case_when(
+     pov == "pitcher" ~ 
+       data.frame(x = c(-.7083, .7083, .7083 ,0, -.7083), y = c(0, 0, .25, .5, .25)),
+     pov == "catcher" ~ 
+       data.frame(x = c(-.7083, .7083, .7083 ,0, -.7083), y = c(0, 0, -.25, -.5, -.25))
+   )
+  
+   g <- geom_polygon(data = df, aes(x = x, y = y), fill = "white", color = "black", linewidth = 1.25)
+  g
+}
+```
+
 #### Data
 ```{r Data, message = FALSE, warning = FALSE}
 pitchers <- read_csv("CSVs/pitcher_comps.csv") %>% 
@@ -193,3 +216,106 @@ preds %>%
        title = "Whiff proportion by predicted whiff value",
        subtitle = "Whiff predictions have a 1% bin width")
 ```
+
+```{r}
+preds %>% 
+  arrange(desc(prediction)) %>% 
+  head(10)
+
+whiff %>% 
+  mutate(count = paste0(balls, "-", strikes)) %>% 
+  filter(pitch_type == "SL") %>% 
+  ggplot(aes(y = whiff, x = pfx_z*12)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~count) +
+  labs(title = "Whiff vs. Non-Whiff by Vertical Movement",
+       x = "Induced Vertical Movement (in.)",
+       y = "Outcome") +
+  NULL
+```
+
+```{r}
+# Sliders
+whiff %>% 
+  filter(pitch_type =="SL") %>% 
+  ggplot(aes(x = -plate_x, y = plate_z)) + 
+  geom_density_2d_filled(contour_var = "density", alpha = 0.5) +
+  geom_zone() +
+  # geom_point(alpha = 0.2) +
+  coord_fixed() +
+  facet_grid(cols = vars(hitter), rows = vars(whiff)) +
+  theme_bw()
+
+# Fastballs
+whiff %>% 
+  filter(pitch_type =="FF") %>% 
+  ggplot(aes(x = -plate_x, y = plate_z)) + 
+  geom_density_2d_filled(contour_var = "density", alpha = 0.5) +
+  geom_zone() +
+  # geom_point(alpha = 0.2) +
+  coord_fixed() +
+  facet_grid(cols = vars(hitter), rows = vars(whiff)) +
+  theme_bw()
+
+
+# Change-Ups
+whiff %>% 
+  filter(pitch_type =="CH") %>% 
+  ggplot(aes(x = -plate_x, y = plate_z)) + 
+  geom_density_2d_filled(contour_var = "density", alpha = 0.5) +
+  geom_zone() +
+  # geom_point(alpha = 0.2) +
+  coord_fixed() +
+  facet_grid(cols = vars(hitter), rows = vars(whiff)) +
+  theme_bw()
+```
+
+```{r}
+whiff %>% 
+  arrange(game_date, player_name, at_bat_number, pitch_number) %>% 
+  mutate(prev_pitch = lag(pitch_type, n = 1, default = NA)) %>% 
+  filter(hitter == "R",
+         pitch_type == "SL",
+         prev_pitch  %in% c("FF", "CH", "SL", "CU"),
+         player_name == "Scherzer, Max") %>% 
+  ggplot(aes(x = -plate_x, y = plate_z)) + 
+  geom_density_2d_filled(contour_var = "density", alpha = 0.5) +
+  geom_zone() +
+  coord_fixed() +
+  facet_grid(cols = vars(prev_pitch), rows = vars(whiff)) +
+  theme_bw()
+
+
+whiff %>% 
+  arrange(game_date, player_name, at_bat_number, pitch_number) %>% 
+  mutate(prev_pitch = lag(pitch_type, n = 1, default = NA)) %>% 
+  filter(hitter == "R",
+         pitch_type == "FF") %>% 
+  ggplot(aes(x = -plate_x, y = plate_z)) + 
+  geom_density_2d_filled(contour_var = "density", alpha = 0.5) +
+  geom_zone() +
+  coord_fixed() +
+  facet_grid(cols = vars(player_name), rows = vars(whiff)) +
+  theme_bw()
+
+zoned <- whiff %>% 
+  mutate(loc_x = round(plate_x*3, 0),
+         loc_y = round(plate_z*3, 0))
+
+zoned %>% 
+  filter(pitch_type == "FF",
+         plate_z > 0 & plate_z < 6,
+         plate_x > -1.5 & plate_x < 1.5) %>% 
+  summarize(whiff_perc = mean(whiff == "TRUE"),
+            pitches = n(),
+            .by = c(loc_x, loc_y, player_name)) %>% 
+  filter(pitches >= 10) %>% 
+  ggplot(aes(x = -loc_x, y = loc_y, fill = whiff_perc)) + 
+  geom_tile() +
+  scale_fill_gradient(low = "gray", high = "red") +
+  facet_wrap(~ player_name) +
+  coord_fixed() +
+  theme_bw()
+```
+
