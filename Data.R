@@ -178,7 +178,7 @@ pitchers <- pitchers %>%
          run_exp_added, win_exp_added,
          sz_top, sz_bot, hit_distance_sc:release_extension,
          estimated_ba_using_speedangle:woba_value, at_bat_number, 
-         description, events, des, on_3b:on_1b, outs_when_up) %>% 
+         description, events, des, on_3b:on_1b, outs_when_up, zone) %>% 
   mutate(pitch_name = str_replace(pitch_name, "4-Seam Fastball", "4-Seam")) 
 
 
@@ -227,7 +227,7 @@ for(i in 2:length(files)) {
              read_csv(paste0("Pitch Level Data/Pitcher Comps 2022/",files[i])))
 }
 
-add <- seasonal %>% 
+add <- stats_2022 %>% 
   select(player_id, woba)
 
 p <- p %>% 
@@ -255,7 +255,7 @@ empty <- p %>%
   mutate(pitch_name = str_replace(pitch_name, "4-Seam Fastball", "4-Seam"))
 
 
-# LHP Pitch Data (35 Pitchers) ####
+# LHP Pitch Data (36 Pitchers) ####
 
 files2 <- list.files("Pitch Level Data/LHP Data/")
 
@@ -279,14 +279,14 @@ pitchers2 <- pitchers2 %>%
   rename(player_id = pitcher...8,
          hitter = stand,
          pitch_speed = release_speed) %>% 
-  select(woba, player_name, player_id, game_date, pitch_type, pitch_name,
+  select(woba, player_name, player_id, p_throws, game_date, pitch_type, pitch_name,
          pitch_speed, spin_axis, pfx_x:plate_z, ra_on_play,
          release_pos_x, release_pos_z, bb_type:strikes, pitch_number,
          hitter, home_team:type, outs_when_up, inning, ra_on_play,
          run_exp_added, win_exp_added,
          sz_top, sz_bot, hit_distance_sc:release_extension,
          estimated_ba_using_speedangle:woba_value, at_bat_number, 
-         description, events, des, on_3b:on_1b, outs_when_up) %>% 
+         description, events, des, on_3b:on_1b, outs_when_up, zone) %>% 
   mutate(pitch_name = str_replace(pitch_name, "4-Seam Fastball", "4-Seam")) 
 
 pitchers2 <- pitchers2 %>% 
@@ -310,7 +310,76 @@ pitchers2 <- pitchers2 %>%
   mutate(base_out = paste0(outs_when_up, "_", on_1b, on_2b, on_3b)) %>% 
   select(-home_team, -away_team)
 
+# pitchers2 <- pitchers2 %>% 
+#   mutate(fb_v = mean(pfx_z), .by = c(pitch_type, game_date, player_id),
+#          fb_h = mean(pfx_x), .by = c(pitch_type, game_date, player_id),
+#          tunnel_z = plate_z*12 - pfx_z + fb_v,
+#          tunnel_x = plate_x*12 - pfx_x + fb_h)
+  
 
+
+
+# RHP Pitch Data (85 Pitchers) ####
+
+files3 <- list.files("Pitch Level Data/RHP Data/")
+
+pitchers3 <- read_csv(paste0("Pitch Level Data/RHP Data/", files3[1]))
+
+for(i in 2:length(files3)) {
+  pitchers3 <- rbind(pitchers3,
+                     read_csv(paste0("Pitch Level Data/RHP Data/",files3[i])))
+}
+
+add3 <- stats_2022 %>% 
+  select(player_id, woba)
+
+
+pitchers3 <- pitchers3 %>% 
+  left_join(add3, by = c("pitcher...8" = "player_id")) %>% 
+  mutate(win_exp_added = case_when(inning_topbot == "Bot"  ~ -delta_home_win_exp,
+                                   inning_topbot == "Top"  ~ delta_home_win_exp),
+         run_exp_added = -delta_run_exp,
+         ra_on_play = post_bat_score - bat_score) %>% 
+  rename(player_id = pitcher...8,
+         hitter = stand,
+         pitch_speed = release_speed) %>% 
+  select(woba, player_name, player_id, p_throws, game_date, pitch_type, pitch_name,
+         pitch_speed, spin_axis, pfx_x:plate_z, ra_on_play,
+         release_pos_x, release_pos_z, bb_type:strikes, pitch_number,
+         hitter, home_team:type, outs_when_up, inning, ra_on_play,
+         run_exp_added, win_exp_added,
+         sz_top, sz_bot, hit_distance_sc:release_extension,
+         estimated_ba_using_speedangle:woba_value, at_bat_number, 
+         description, events, des, on_3b:on_1b, outs_when_up, zone) %>% 
+  mutate(pitch_name = str_replace(pitch_name, "4-Seam Fastball", "4-Seam")) 
+
+pitchers3 <- pitchers3 %>% 
+  mutate(speed_change = pitch_speed - mean(pitch_speed), 
+         .by = c(pitch_type, game_date, player_id) ) %>% 
+  mutate(pfx_total = sqrt(pfx_x^2 + pfx_z^2)) %>% 
+  mutate(break_change = pfx_total - mean(pfx_total), 
+         .by = c(pitch_type, game_date, player_id) ) %>% 
+  mutate(distance = sqrt(plate_x^2 + (plate_z - (sz_top - sz_bot)/2)^2)) %>% 
+  mutate(
+    on_3b = case_when(
+      on_3b > 0 ~ 1,
+      TRUE ~ 0),
+    on_2b = case_when(
+      on_2b > 0 ~ 1,
+      TRUE ~ 0),
+    on_1b = case_when(
+      on_1b > 0 ~ 1,
+      TRUE ~ 0)
+  ) %>% 
+  mutate(base_out = paste0(outs_when_up, "_", on_1b, on_2b, on_3b)) %>% 
+  select(-home_team, -away_team)
+
+
+
+# All Pitch Data (121 Pitchers) ####
+pitchers4 <- rbind(pitchers2, pitchers3) %>% 
+  as.data.frame() %>% 
+  arrange(player_id)
 
 
 # CSV Exports ####
@@ -329,3 +398,9 @@ write.csv(empty, "bases_empty.csv")
 
 # Pitch-by-Pitch Lefties CSV
 write.csv(pitchers2, "lhp_pitches.csv")
+
+# Pitch-by-Pitch Righties CSV
+write.csv(pitchers3, "rhp_pitches.csv")
+
+# Pitch-by-Pitch All CSV
+write.csv(pitchers4, "all_pitches.csv")
