@@ -1,9 +1,10 @@
 ---
-title: "Week 12"
+title: "Week 13"
 author: "Evan Wu"
 output: 
   html_document:
-    code_folding: hide
+    code_folding:
+      hide
 ---
 
 <br>
@@ -56,20 +57,22 @@ geom_plate <- function(pov = "pitcher"){
 #### Data
 ```{r Data, message = FALSE, warning = FALSE}
 
-LHP <- read_csv("CSVs/lhp_pitches.csv") %>% 
+all <- read_csv("CSVs/all_pitches.csv") %>% 
   select(-...1) %>% 
-  filter(!is.na(pitch_type)) %>% 
-  mutate(pitch_type = str_replace(pitch_type, "CS", "CU"),
-         pitch_name = str_replace(pitch_name, "Slow Curve", "Curveball"),
-         pitch_type = str_replace(pitch_type, "KC", "CU"),
-         pitch_name = str_replace(pitch_name, "Knuckle Curve", "Curveball"))
+  mutate(wOBAr = case_when(
+    woba >= 0.370 ~ 6,
+    woba >= 0.340 ~ 5,
+    woba >= 0.310 ~ 4,
+    woba >= 0.280 ~ 3,
+    woba >= 0.250 ~ 2,
+    woba >= 0.220 ~ 1)) %>% 
+  mutate(wOBAr = as.factor(wOBAr))
 
-whiff <- LHP %>% 
+whiff <- all %>% 
   mutate(whiff = description == "swinging_strike",
          whiff = as.character(whiff)) %>% 
   filter(pitch_type != "NA",
          pitch_type != "PO")
-
 ```
 
 
@@ -281,7 +284,7 @@ whiff %>%
   geom_density_2d_filled(contour_var = "density", alpha = 0.5) +
   geom_zone() +
   coord_fixed() +
-  facet_grid(cols = vars(player_name), rows = vars(whiff)) +
+  facet_grid(cols = vars(wOBAr), rows = vars(whiff)) +
   theme_bw()
 
 zoned <- whiff %>% 
@@ -294,35 +297,24 @@ zoned %>%
          plate_x > -1.5 & plate_x < 1.5) %>% 
   summarize(whiff_perc = mean(whiff == "TRUE"),
             pitches = n(),
-            .by = c(loc_x, loc_y, player_name)) %>% 
+            .by = c(loc_x, loc_y, wOBAr)) %>% 
   filter(pitches >= 10) %>% 
   ggplot(aes(x = -loc_x, y = loc_y, fill = whiff_perc)) + 
   geom_tile() +
   scale_fill_gradient(low = "gray", high = "red") +
-  facet_wrap(~ player_name) +
+  facet_wrap(~ wOBAr) +
   coord_fixed() +
   theme_bw()
 ```
 
 ```{r wOBA Investigation, warning = FALSE, message = FALSE}
 
-LHP2 <- LHP %>% 
-  mutate(wOBAr = case_when(
-    woba >= 0.360 ~ 6,
-    woba >= 0.335 ~ 5,
-    woba >= 0.310 ~ 4,
-    woba >= 0.285 ~ 3,
-    woba >= 0.260 ~ 2,
-    woba >= 0.235 ~ 1)) %>% 
-  mutate(wOBAr = as.factor(wOBAr))
-
-
-LHP2 %>% 
+all %>% 
   ggplot(aes(x = wOBAr, pitch_speed, color = wOBAr)) +
   geom_boxplot() +
   facet_wrap(~ pitch_name)
 
-LHP2 %>% 
+all %>% 
   ggplot(aes(x = estimated_woba_using_speedangle, pitch_speed)) +
   geom_point(alpha = 0.2) +
   facet_wrap(~ pitch_name)

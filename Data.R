@@ -287,7 +287,12 @@ pitchers2 <- pitchers2 %>%
          sz_top, sz_bot, hit_distance_sc:release_extension,
          estimated_ba_using_speedangle:woba_value, at_bat_number, 
          description, events, des, on_3b:on_1b, outs_when_up, zone) %>% 
-  mutate(pitch_name = str_replace(pitch_name, "4-Seam Fastball", "4-Seam")) 
+  mutate(pitch_name = str_replace(pitch_name, "4-Seam Fastball", "4-Seam")) %>% 
+  filter(!is.na(pitch_type)) %>% 
+  mutate(pitch_type = str_replace(pitch_type, "CS", "CU"),
+         pitch_name = str_replace(pitch_name, "Slow Curve", "Curveball"),
+         pitch_type = str_replace(pitch_type, "KC", "CU"),
+         pitch_name = str_replace(pitch_name, "Knuckle Curve", "Curveball"))
 
 pitchers2 <- pitchers2 %>% 
   mutate(speed_change = pitch_speed - mean(pitch_speed), 
