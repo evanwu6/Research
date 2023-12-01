@@ -320,3 +320,37 @@ all %>%
   facet_wrap(~ pitch_name)
 ```
 
+```{r, eval = FALSE}
+####
+pitchers2 %>% 
+  filter(player_name == "McClanahan, Shane",
+         game_date == "2022-05-11") %>%
+  mutate(whiff = description == "swinging_strike",
+         whiff = as.character(whiff)) %>% 
+  filter(pitch_type != "NA",
+         pitch_type != "PO") %>% 
+  ggplot(aes(x = -tunnel_x, y = tunnel_z, color = pitch_type)) +
+  geom_zone() +
+  geom_point() +
+  geom_segment(aes(xend = -plate_x, yend = plate_z),
+               alpha = 0.3) +
+  coord_fixed() +
+  facet_wrap(~ whiff)
+
+
+pitchers2 %>% 
+  filter(player_name == "McClanahan, Shane",
+         game_date == "2022-05-11",
+         pitch_type == "CU") %>%
+  mutate(whiff = description == "swinging_strike",
+         whiff = as.character(whiff)) %>% 
+  filter(pitch_type != "NA",
+         pitch_type != "PO") %>% 
+  ggplot(aes(x = -tunnel_x, y = tunnel_z, color = whiff)) +
+  geom_zone() +
+  geom_point() +
+  coord_fixed()
+  
+####
+```
+

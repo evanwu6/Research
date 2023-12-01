@@ -315,13 +315,21 @@ pitchers2 <- pitchers2 %>%
   mutate(base_out = paste0(outs_when_up, "_", on_1b, on_2b, on_3b)) %>% 
   select(-home_team, -away_team)
 
-# pitchers2 <- pitchers2 %>% 
-#   mutate(fb_v = mean(pfx_z), .by = c(pitch_type, game_date, player_id),
-#          fb_h = mean(pfx_x), .by = c(pitch_type, game_date, player_id),
-#          tunnel_z = plate_z*12 - pfx_z + fb_v,
-#          tunnel_x = plate_x*12 - pfx_x + fb_h)
-  
+pitchers2_ff <- pitchers2 %>%
+  filter(pitch_type == "FF") %>% 
+  summarize(fb_v = mean(pfx_z),
+         fb_h = mean(pfx_x),
+        .by = c(game_date, player_id))
 
+pitchers2 <- pitchers2 %>% 
+  left_join(pitchers2_ff, by = c("game_date" = "game_date",
+                                 "player_id" = "player_id")) %>% 
+  mutate(tunnel_z = plate_z - pfx_z + fb_v,
+         tunnel_x = plate_x - pfx_x + fb_h) %>%
+  mutate(whiff = description == "swinging_strike",
+         whiff = as.character(whiff)) %>% 
+  filter(pitch_type != "NA",
+         pitch_type != "PO")
 
 
 # RHP Pitch Data (85 Pitchers) ####
@@ -378,6 +386,23 @@ pitchers3 <- pitchers3 %>%
   ) %>% 
   mutate(base_out = paste0(outs_when_up, "_", on_1b, on_2b, on_3b)) %>% 
   select(-home_team, -away_team)
+
+
+pitchers3_ff <- pitchers3 %>%
+  filter(pitch_type == "FF") %>% 
+  summarize(fb_v = mean(pfx_z),
+            fb_h = mean(pfx_x),
+            .by = c(game_date, player_id))
+
+pitchers3 <- pitchers3 %>% 
+  left_join(pitchers2_ff, by = c("game_date" = "game_date",
+                                 "player_id" = "player_id")) %>% 
+  mutate(tunnel_z = plate_z - pfx_z + fb_v,
+         tunnel_x = plate_x - pfx_x + fb_h) %>%
+  mutate(whiff = description == "swinging_strike",
+         whiff = as.character(whiff)) %>% 
+  filter(pitch_type != "NA",
+         pitch_type != "PO")
 
 
 
