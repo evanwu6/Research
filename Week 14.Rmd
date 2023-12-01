@@ -126,7 +126,7 @@ RHP %>%
   coord_fixed() +
   facet_wrap(~whiff) +
   labs(color = "Pitcher",
-       title = "Fastball Location")
+       title = "Fastball Movement")
 
 RHP_avg <- RHP %>% 
   group_by(player_name,
@@ -152,13 +152,24 @@ RHP_avg %>%
 
 LHP %>% 
   filter(pitch_type == "FF") %>% 
+  ggplot(aes(x = -plate_x, y = plate_z, 
+             color = player_name)) +
+  geom_zone() +
+  geom_point(alpha = 0.5) +
+  coord_fixed() +
+  facet_wrap(~whiff) +
+  labs(color = "Pitcher",
+       title = "Fastball Location")
+
+LHP %>% 
+  filter(pitch_type == "FF") %>% 
   ggplot(aes(x = -pfx_x, y = pfx_z, 
              color = player_name)) +
   geom_point(alpha = 0.5) +
   coord_fixed() +
   facet_wrap(~whiff) +
   labs(color = "Pitcher",
-       title = "Fastball Location")
+       title = "Fastball Movement")
 
 LHP_avg <- LHP %>% 
   group_by(player_name,
