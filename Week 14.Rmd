@@ -193,3 +193,34 @@ LHP_avg %>%
   facet_wrap(~ pitch_name)
 ```
 
+```{r}
+test <- all %>% 
+  group_by(player_name) %>% 
+  summarize(woba = mean(woba),
+            whiff = mean(whiff))
+
+X2022_stats <- read_csv("Pitcher Seasonal Data/2022_stats.csv")
+
+stats <- X2022_stats %>% 
+  mutate(player_name = `last_name, first_name`) %>% 
+  left_join(test, by = "player_name") %>% 
+  filter(!is.na(whiff))
+
+stats %>% 
+  ggplot(aes(x = whiff, y = k_percent/100)) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  labs(x = "Whiff Rate",
+       y = "Strikeout Percentage",
+       title = "Strikeout Percentage vs. Whiff Rate",
+       caption = "Data from Baseball Savant",
+       subtitle = "Data: 2022 Seasonal Stats for Pitchers with 1800+ Pitches") +
+  scale_x_continuous(labels = scales::percent) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+cor(stats$p_era, stats$k_percent)
+```
+

@@ -395,7 +395,7 @@ pitchers3_ff <- pitchers3 %>%
             .by = c(game_date, player_id))
 
 pitchers3 <- pitchers3 %>% 
-  left_join(pitchers2_ff, by = c("game_date" = "game_date",
+  left_join(pitchers3_ff, by = c("game_date" = "game_date",
                                  "player_id" = "player_id")) %>% 
   mutate(tunnel_z = plate_z - pfx_z + fb_v,
          tunnel_x = plate_x - pfx_x + fb_h) %>%
