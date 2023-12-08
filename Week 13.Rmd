@@ -177,7 +177,7 @@ model1 <- glm(whiff ~ pitch_speed + spin_axis + pfx_x + pfx_z + plate_x + plate_
 # Reduced Model
 model1 <- glm(whiff ~ pitch_speed + plate_x + plate_z +
               release_spin_rate + speed_change + break_change + pfx_total + distance,
-              data = whiff_sl)
+              data = whiff_sl, family = binomial)
 
 summary(model1)
 
