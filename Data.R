@@ -286,7 +286,7 @@ pitchers2 <- pitchers2 %>%
          run_exp_added, win_exp_added,
          sz_top, sz_bot, hit_distance_sc:release_extension,
          estimated_ba_using_speedangle:woba_value, at_bat_number, 
-         description, events, des, on_3b:on_1b, outs_when_up, zone) %>% 
+         description, events, des, on_3b:on_1b, outs_when_up, zone, batter) %>% 
   mutate(pitch_name = str_replace(pitch_name, "4-Seam Fastball", "4-Seam")) %>% 
   filter(!is.na(pitch_type)) %>% 
   mutate(pitch_type = str_replace(pitch_type, "CS", "CU"),
@@ -363,7 +363,7 @@ pitchers3 <- pitchers3 %>%
          run_exp_added, win_exp_added,
          sz_top, sz_bot, hit_distance_sc:release_extension,
          estimated_ba_using_speedangle:woba_value, at_bat_number, 
-         description, events, des, on_3b:on_1b, outs_when_up, zone) %>% 
+         description, events, des, on_3b:on_1b, outs_when_up, zone, batter) %>% 
   mutate(pitch_name = str_replace(pitch_name, "4-Seam Fastball", "4-Seam")) 
 
 pitchers3 <- pitchers3 %>% 
@@ -412,6 +412,26 @@ pitchers4 <- rbind(pitchers2, pitchers3) %>%
   arrange(player_id)
 
 
+# Batter Data
+# URL: https://baseballsavant.mlb.com/leaderboard/custom?year=2022&type=batter&filter=&sort=4&sortDir=desc&min=10&selections=pa,hit,home_run,k_percent,bb_percent,batting_avg,slg_percent,on_base_percent,on_base_plus_slg,r_total_stolen_base,woba,xwoba,exit_velocity_avg,sweet_spot_percent,barrel_batted_rate,solidcontact_percent,flareburner_percent,poorlyunder_percent,poorlytopped_percent,poorlyweak_percent,hard_hit_percent,&chart=false&x=pa&y=pa&r=no&chartType=beeswarm
+# Downloaded: December 29, 2023
+
+batters <- read_csv("~/Downloads/Research/Research/batter_stats.csv") %>% 
+  rename(batter_name = `last_name, first_name`,
+         batter_id = player_id, 
+         PA = pa, H = hit, HR = home_run,
+         AVG = batting_avg,
+         SLG = slg_percent,
+         OBP = on_base_percent,
+         OPS = on_base_plus_slg,
+         xwOBA = xwoba,
+         wOBA = woba,
+         SB = r_total_stolen_base,
+         EV = exit_velocity_avg,
+         barrel_rate = barrel_batted_rate) %>% 
+  select(-year, -`...25`)
+
+
 # CSV Exports ####
 
 # Pitch Arsenal CSV
@@ -434,3 +454,6 @@ write.csv(pitchers3, "rhp_pitches.csv")
 
 # Pitch-by-Pitch All CSV
 write.csv(pitchers4, "all_pitches.csv")
+
+# Batter Stats
+write.csv(batters, "batter_stats.csv")
