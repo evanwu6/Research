@@ -224,3 +224,93 @@ stats %>%
 cor(stats$p_era, stats$k_percent)
 ```
 
+```{r Whiff Rate Predictions, warning = FALSE, message = FALSE}
+
+# Speed
+all %>% 
+  mutate(speed_rounded = round(pitch_speed, 1)) %>% 
+  group_by(pitch_name, speed_rounded) %>% 
+  summarize(whiff_rate = mean(whiff), pitches = n()) %>% 
+  filter(pitches >= 10) %>% 
+  ggplot(aes(x = speed_rounded, y = whiff_rate)) +
+  geom_point(aes(color = whiff_rate),
+             size = 0.5, show.legend = FALSE) +
+  geom_smooth(se = FALSE, size = 0.5) +
+  facet_wrap(~ pitch_name) +
+  scale_color_gradient(low = "skyblue", high = "firebrick") +
+  labs(x = "Pitch Speed",
+       y = "Whiff Rate",
+       title = "Whiff Rate vs. Pitch Speed",
+       caption = "Shows speeds to one decimal with at least 10 pitches/observations.") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+
+# Spin
+all %>% 
+  mutate(spin_rounded = round(release_spin_rate, -1)) %>% 
+  group_by(pitch_name, spin_rounded) %>% 
+  summarize(whiff_rate = mean(whiff), pitches = n()) %>% 
+  filter(pitches >= 10) %>% 
+  ggplot(aes(x = spin_rounded, y = whiff_rate)) +
+  geom_point(aes(color = whiff_rate),
+             size = 0.5, show.legend = FALSE) +
+  geom_smooth(se = FALSE, size = 0.5) +
+  facet_wrap(~ pitch_name) +
+  scale_color_gradient(low = "skyblue", high = "firebrick") +
+  labs(x = "Spin Rate (rpm)",
+       y = "Whiff Rate",
+       title = "Whiff Rate vs. Spin Rate",
+       caption = "Shows spin rate groups rounded to the tens place with at least 10 pitches/observations.") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+
+# Horizontal Movement
+all %>% 
+  mutate(movement_rounded = round(pfx_x*12*2)/2) %>% 
+  group_by(pitch_name, movement_rounded) %>% 
+  summarize(whiff_rate = mean(whiff), pitches = n()) %>% 
+  filter(pitches >= 10) %>% 
+  ggplot(aes(x = movement_rounded, y = whiff_rate)) +
+  geom_point(aes(color = whiff_rate),
+             size = 0.5, show.legend = FALSE) +
+  geom_smooth(se = FALSE, size = 0.5) +
+  facet_wrap(~ pitch_name) +
+  scale_color_gradient(low = "skyblue", high = "firebrick") +
+  labs(x = "Horizontal Break (in.)",
+       y = "Whiff Rate",
+       title = "Whiff Rate vs. Horizontal Break (in.)",
+       caption = "Shows horizontalpitch movement groups rounded to the nearest
+       0.5 with at least 10 pitches/observations.") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+
+
+# Vertical Movement
+all %>% 
+  mutate(movement_rounded = round(pfx_z*12*2)/2) %>% 
+  group_by(pitch_name, movement_rounded) %>% 
+  summarize(whiff_rate = mean(whiff), pitches = n()) %>% 
+  filter(pitches >= 10) %>% 
+  ggplot(aes(x = movement_rounded, y = whiff_rate)) +
+  geom_point(aes(color = whiff_rate),
+             size = 0.5, show.legend = FALSE) +
+  geom_smooth(se = FALSE, size = 0.5) +
+  facet_wrap(~ pitch_name) +
+  scale_color_gradient(low = "skyblue", high = "firebrick") +
+  labs(x = "Vertical Break (in.)",
+       y = "Whiff Rate",
+       title = "Whiff Rate vs. Vertical Break (in.)",
+       caption = "Shows vertical pitch movement groups rounded to the nearest
+       0.5 with at least 10 pitches/observations.") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+```
+
