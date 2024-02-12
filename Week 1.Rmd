@@ -95,10 +95,10 @@ sl_preds <- sliders %>%
 sl_preds %>% 
   mutate(prediction = round(prediction, 2)) %>% 
   group_by(prediction) %>% 
-  summarize(mean(whiff)) %>% 
+  summarize(n = n(), whiff_rate = mean(whiff)) %>% 
   as.data.frame() %>% 
-  ggplot(aes(x = prediction, y = `mean(whiff)`)) +
-  geom_point() +
+  ggplot(aes(x = prediction, y = whiff_rate)) +
+  geom_point(aes(size = n)) + # size of bin shown on graph
   coord_fixed() +
   geom_smooth(se = FALSE) +
   labs(y = "observed whiff proportion",
