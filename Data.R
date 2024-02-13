@@ -300,7 +300,7 @@ pitchers2 <- pitchers2 %>%
   mutate(pfx_total = sqrt(pfx_x^2 + pfx_z^2)) %>% 
   mutate(break_change = pfx_total - mean(pfx_total), 
          .by = c(pitch_type, game_date, player_id) ) %>% 
-  mutate(distance = sqrt(plate_x^2 + (plate_z - (sz_top - sz_bot)/2)^2)) %>% 
+  mutate(distance = sqrt(plate_x^2 + (plate_z - (sz_top + sz_bot)/2)^2)) %>% 
   mutate(
     on_3b = case_when(
       on_3b > 0 ~ 1,
@@ -416,20 +416,20 @@ pitchers4 <- rbind(pitchers2, pitchers3) %>%
 # URL: https://baseballsavant.mlb.com/leaderboard/custom?year=2022&type=batter&filter=&sort=4&sortDir=desc&min=10&selections=pa,hit,home_run,k_percent,bb_percent,batting_avg,slg_percent,on_base_percent,on_base_plus_slg,r_total_stolen_base,woba,xwoba,exit_velocity_avg,sweet_spot_percent,barrel_batted_rate,solidcontact_percent,flareburner_percent,poorlyunder_percent,poorlytopped_percent,poorlyweak_percent,hard_hit_percent,&chart=false&x=pa&y=pa&r=no&chartType=beeswarm
 # Downloaded: December 29, 2023
 
-batters <- read_csv("~/Downloads/Research/Research/batter_stats.csv") %>% 
-  rename(batter_name = `last_name, first_name`,
-         batter_id = player_id, 
-         PA = pa, H = hit, HR = home_run,
-         AVG = batting_avg,
-         SLG = slg_percent,
-         OBP = on_base_percent,
-         OPS = on_base_plus_slg,
-         xwOBA = xwoba,
-         wOBA = woba,
-         SB = r_total_stolen_base,
-         EV = exit_velocity_avg,
-         barrel_rate = barrel_batted_rate) %>% 
-  select(-year, -`...25`)
+# batters <- read_csv("~/Downloads/Research/Research/CSVs/batter_stats.csv") %>% 
+#   rename(batter_name = `last_name, first_name`,
+#          batter_id = player_id, 
+#          PA = pa, H = hit, HR = home_run,
+#          AVG = batting_avg,
+#          SLG = slg_percent,
+#          OBP = on_base_percent,
+#          OPS = on_base_plus_slg,
+#          xwOBA = xwoba,
+#          wOBA = woba,
+#          SB = r_total_stolen_base,
+#          EV = exit_velocity_avg,
+#          barrel_rate = barrel_batted_rate) %>% 
+#   select(-year, -`...25`)
 
 
 # CSV Exports ####
@@ -457,3 +457,4 @@ write.csv(pitchers4, "all_pitches.csv")
 
 # Batter Stats
 write.csv(batters, "batter_stats.csv")
+
