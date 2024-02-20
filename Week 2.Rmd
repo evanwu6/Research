@@ -11,7 +11,7 @@ output:
 
 #### Code Background
 
-Looking at whiff data for left-handed pitchers (35 pitchers from 2022, all with
+Looking at whiff data for right-handed pitchers (from 2022, all with
 1842+ seasonal pitches). 
 
 <br>
@@ -490,7 +490,7 @@ sl_preds_s %>%
 ## Fastball
 # Model
 ff_model_s <- glm(whiff ~ pitch_speed + pfx_z + plate_x + plate_z + zone +
-              strikes + pfx_total + speed_change + break_change + distance + distance_sweet,
+              strikes + pfx_total + speed_change + break_change + distance,
               data = fastballs, family = binomial)
 
 summary(ff_model_s)

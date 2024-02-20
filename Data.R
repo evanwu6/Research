@@ -315,21 +315,54 @@ pitchers2 <- pitchers2 %>%
   mutate(base_out = paste0(outs_when_up, "_", on_1b, on_2b, on_3b)) %>% 
   select(-home_team, -away_team)
 
-pitchers2_ff <- pitchers2 %>%
-  filter(pitch_type == "FF") %>% 
+pitchers2_overview <- pitchers2 %>% 
+  filter(pitch_type  %in% c("FF", "SI", "FC")) %>% 
+  group_by(player_id, pitch_type) %>% 
+  summarize(Pitches = n()) %>% 
+  pivot_wider(names_from = pitch_type, values_from = Pitches)
+  
+pitchers2_overview <- pitchers2_overview %>% 
+  replace(is.na(pitchers2_overview), 0) %>% 
+  mutate(fb_type = case_when(FF >= SI & FF >= FC ~ "FF",
+                          SI > FF & SI >= FC ~ "SI",
+                          FC > FF & FC > SI ~ "FC")) %>% 
+  select(player_id, fb_type)
+
+pitchers2 <- pitchers2 %>% 
+  left_join(pitchers2_overview, by = c("player_id" = "player_id"))
+  
+
+pitchers2_fb <- pitchers2 %>%
+  filter(pitch_type  == fb_type) %>% 
   summarize(fb_v = mean(pfx_z),
          fb_h = mean(pfx_x),
         .by = c(game_date, player_id))
 
 pitchers2 <- pitchers2 %>% 
-  left_join(pitchers2_ff, by = c("game_date" = "game_date",
+  left_join(pitchers2_fb, by = c("game_date" = "game_date",
                                  "player_id" = "player_id")) %>% 
   mutate(tunnel_z = plate_z - pfx_z + fb_v,
          tunnel_x = plate_x - pfx_x + fb_h) %>%
   mutate(whiff = description == "swinging_strike",
          whiff = as.character(whiff)) %>% 
-  filter(pitch_type != "NA",
+  filter(!is.na(pitch_type),
          pitch_type != "PO")
+
+pitchers2_diffs <- pitchers2 %>% 
+  filter(pitch_type == fb_type) %>% 
+  group_by(player_id, game_date) %>% 
+  summarize(speed = mean(pitch_speed),
+            horz = mean(pfx_x),
+            ivb = mean(pfx_z))
+
+pitchers2 <- pitchers2 %>% 
+  left_join(pitchers2_diffs, by = c("game_date" = "game_date",
+                                   "player_id" = "player_id")) %>% 
+  mutate(speed_fb_diff = pitch_speed - speed,
+         pfx_x_fb_diff = pfx_x - horz,
+         pfx_z_fb_diff = pfx_z - ivb) %>% 
+  select(-speed, -horz, -ivb)
+  
 
 
 # RHP Pitch Data (85 Pitchers) ####
@@ -388,14 +421,31 @@ pitchers3 <- pitchers3 %>%
   select(-home_team, -away_team)
 
 
-pitchers3_ff <- pitchers3 %>%
-  filter(pitch_type == "FF") %>% 
+pitchers3_overview <- pitchers3 %>% 
+  filter(pitch_type  %in% c("FF", "SI", "FC")) %>% 
+  group_by(player_id, pitch_type) %>% 
+  summarize(Pitches = n()) %>% 
+  pivot_wider(names_from = pitch_type, values_from = Pitches)
+
+pitchers3_overview <- pitchers3_overview %>% 
+  replace(is.na(pitchers3_overview), 0) %>% 
+  mutate(fb_type = case_when(FF >= SI & FF >= FC ~ "FF",
+                             SI > FF & SI >= FC ~ "SI",
+                             FC > FF & FC > SI ~ "FC")) %>% 
+  select(player_id, fb_type)
+
+pitchers3 <- pitchers3 %>% 
+  left_join(pitchers3_overview, by = c("player_id" = "player_id"))
+
+
+pitchers3_fb <- pitchers3 %>%
+  filter(pitch_type  == fb_type) %>% 
   summarize(fb_v = mean(pfx_z),
             fb_h = mean(pfx_x),
             .by = c(game_date, player_id))
 
 pitchers3 <- pitchers3 %>% 
-  left_join(pitchers3_ff, by = c("game_date" = "game_date",
+  left_join(pitchers3_fb, by = c("game_date" = "game_date",
                                  "player_id" = "player_id")) %>% 
   mutate(tunnel_z = plate_z - pfx_z + fb_v,
          tunnel_x = plate_x - pfx_x + fb_h) %>%
@@ -403,6 +453,21 @@ pitchers3 <- pitchers3 %>%
          whiff = as.character(whiff)) %>% 
   filter(pitch_type != "NA",
          pitch_type != "PO")
+
+pitchers3_diffs <- pitchers3 %>% 
+  filter(pitch_type == fb_type) %>% 
+  group_by(player_id, game_date) %>% 
+  summarize(speed = mean(pitch_speed),
+            horz = mean(pfx_x),
+            ivb = mean(pfx_z))
+
+pitchers3 <- pitchers3 %>% 
+  left_join(pitchers3_diffs, by = c("game_date" = "game_date",
+                                    "player_id" = "player_id")) %>% 
+  mutate(speed_fb_diff = pitch_speed - speed,
+         pfx_x_fb_diff = pfx_x - horz,
+         pfx_z_fb_diff = pfx_z - ivb) %>% 
+  select(-speed, -horz, -ivb)
 
 
 
