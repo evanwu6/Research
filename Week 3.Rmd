@@ -66,7 +66,8 @@ rhp <- read_csv("CSVs/rhp_pitches.csv") %>%
   mutate(prev_pitch = case_when(prev_pitch  %in% c("FF", "FC", "SI") ~ "Fastball",
                                 prev_pitch %in% c("SL", "CU", "KC", 
                                                   "SV", "ST", "CS") ~ "Breaking Ball",
-                                prev_pitch  %in% c("CH", "FS") ~ "Off Speed"))
+                                prev_pitch  %in% c("CH", "FS") ~ "Off Speed")) %>% 
+  mutate(zone = as.factor(zone))
 
 rhp <- rhp %>% 
   mutate(prev_pitch = ifelse(is.na(prev_pitch), "None", prev_pitch)) %>% 
