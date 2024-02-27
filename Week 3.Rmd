@@ -67,7 +67,7 @@ rhp <- read_csv("CSVs/rhp_pitches.csv") %>%
                                 prev_pitch %in% c("SL", "CU", "KC", 
                                                   "SV", "ST", "CS") ~ "Breaking Ball",
                                 prev_pitch  %in% c("CH", "FS") ~ "Off Speed")) %>% 
-  mutate(zone = as.factor(zone))
+  mutate(zone = relevel(as.factor(zone), ref = 5))
 
 rhp <- rhp %>% 
   mutate(prev_pitch = ifelse(is.na(prev_pitch), "None", prev_pitch)) %>% 
@@ -95,10 +95,8 @@ fastballs <- rhp %>%
 # Initial Model
 sl_model_all <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
               count + pfx_total + speed_change + break_change + distance + 
-                prev_pitch + speed_fb_diff + pfx_x_fb_diff + pfx_z_fb_diff +
-                speed_change^2 + break_change^2 + distance^2 + 
-                I(plate_x^2) + I(plate_z^2) +
-                speed_fb_diff^2 + pfx_x_fb_diff^2 + pfx_z_fb_diff^2,
+                prev_pitch + speed_fb_diff + pfx_x_fb_diff + pfx_z_fb_diff + release_spin_rate +
+                I(plate_x^2) + I(plate_z^2),
               data = sliders, family = binomial)
 
 # Model Evaluation
@@ -109,7 +107,7 @@ summary(sl_model_all)
 
 ```{r Slider Refined Model, message = FALSE}
 sl_model <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
-              pfx_total + speed_change + break_change + distance + 
+              pfx_total + speed_change + break_change + distance + release_spin_rate +
                 prev_pitch + speed_fb_diff + I(plate_x^2) + I(plate_z^2),
               data = sliders, family = binomial)
 sl_model %>% summary
@@ -145,9 +143,8 @@ sl_preds %>%
 ```{r Fastball Init Model, message = FALSE}
 # Initial Model
 fb_model_all <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
-              count + pfx_total + speed_change + break_change + distance + 
-                prev_pitch + pitch_type + I(plate_x^2) + I(plate_z^2) +
-                speed_change^2 + break_change^2 + distance^2,
+              count + pfx_total + speed_change + break_change + distance + release_spin_rate +
+                prev_pitch + pitch_type + I(plate_x^2) + I(plate_z^2),
               data = fastballs, family = binomial)
 
 # Model Evaluation
@@ -158,7 +155,7 @@ summary(fb_model_all)
 
 ```{r Fastball Refined Model, message = FALSE}
 fb_model <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
-              pfx_total + speed_change + break_change + 
+              pfx_total + speed_change + break_change + release_spin_rate +
                 pitch_type + I(plate_x^2) + I(plate_z^2),
               data = fastballs, family = binomial)
 fb_model %>% summary

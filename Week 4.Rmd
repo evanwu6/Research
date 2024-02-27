@@ -1,0 +1,371 @@
+---
+title: "Week 4"
+author: "Evan Wu"
+output: 
+  html_document:
+    code_folding:
+      hide
+---
+
+<br>
+
+#### Code Background
+
+Looking at whiff data for right-handed pitchers (from 2022, 85 pitchers with
+1842+ seasonal pitches). 
+
+<br>
+
+#### Libraries
+```{r Libraries, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(knitr)
+library(glmnet)
+library(patchwork)
+library(olsrr)
+```
+
+
+``` {r Functions, }
+# Geom Zone (Jackie's) ####
+
+geom_zone <- function(top = 11/3, bottom = 3/2, linecolor = "black"){
+  geom_rect(xmin = -.7083, xmax = .7083, ymin = bottom, ymax = top,
+            alpha = 0, color = linecolor, linewidth = 0.75)
+}
+
+# c(0, 0, -.25, -.5, -.25))
+
+geom_plate <- function(pov = "pitcher"){
+   df <- case_when(
+     pov == "pitcher" ~ 
+       data.frame(x = c(-.7083, .7083, .7083 ,0, -.7083), y = c(0, 0, .25, .5, .25)),
+     pov == "catcher" ~ 
+       data.frame(x = c(-.7083, .7083, .7083 ,0, -.7083), y = c(0, 0, -.25, -.5, -.25))
+   )
+  
+   g <- geom_polygon(data = df, aes(x = x, y = y), fill = "white", color = "black", linewidth = 1.25)
+  g
+}
+```
+
+#### Data
+Added code to calculate whether a batted ball is a barrel or not.
+Used code to find the slopes and intercepts for both lines and then inputted
+rounded coefficients into the model for more simplicity.
+
+Added predicted whiff rate. There were a few hitters with more than 300 pitches
+of a given pitch type, so for those I used their true whiff percentage.
+
+Also added a strike metric that includes all pitches that can strike a hitter out:
+called and swinging strikes, as well as foul tips and foul bunts.
+
+```{r Data, message = FALSE, warning = FALSE}
+
+rhp <- read_csv("CSVs/rhp_pitches.csv") %>% 
+  select(-...1) %>% 
+  filter(!is.na(pfx_z)) %>% 
+  mutate(distance_sweet = sqrt(((plate_x - 0.85)^2)+((plate_z - 1.55)^2))) %>% 
+  mutate(zone = case_when(distance < 2 ~ zone,
+                          distance >= 2 & plate_z > (sz_top + sz_bot)/2 ~ 16,
+                          distance >= 2 & plate_z <= (sz_top + sz_bot)/2 ~ 17)) %>% 
+  mutate(ab_id = paste0(game_date, "_", player_id, "_", at_bat_number),
+         prev_ab_id = lead(ab_id, 1)) %>% 
+  mutate(prev_pitch = ifelse(ab_id == prev_ab_id, lead(pitch_type, 1), NA)) %>% 
+  select(-ab_id, -prev_ab_id) %>% 
+  mutate(prev_pitch = case_when(prev_pitch  %in% c("FF", "FC", "SI") ~ "Fastball",
+                                prev_pitch %in% c("SL", "CU", "KC", 
+                                                  "SV", "ST", "CS") ~ "Breaking Ball",
+                                prev_pitch  %in% c("CH", "FS") ~ "Off Speed")) %>% 
+  mutate(zone = relevel(as.factor(zone), ref = 5))
+
+# New Code for Barrels
+
+# Upper Limit
+m <- (50 - 30) / (116 - 98)
+b <- 30 - m * 98
+paste0("y = ", round(m, 2), "x ", round(b, 2))
+
+# Lower Limit
+m <- (8 - 26) / (116 - 98)
+b <- 26 - m * 98
+paste0("y = ", round(m, 2), "x + ", round(b, 2))
+
+# Making Limits
+rhp <- rhp %>% 
+  mutate(barrel_upper_lim = case_when(
+    launch_speed <= 98 ~ 30,
+    launch_speed > 98 & launch_speed < 116 ~ (1.11)*launch_speed - 78.89,
+    launch_speed >= 116 ~ 50),
+        barrel_lower_lim = case_when(
+    launch_speed <= 98 ~ 26,
+    launch_speed > 98 & launch_speed < 116 ~ (-1)*launch_speed + 124,
+    launch_speed >= 116 ~ 8)
+    )
+
+# Barrel
+rhp <- rhp %>% 
+  mutate(Barrel = launch_angle <= barrel_upper_lim & 
+                  launch_angle >= barrel_lower_lim &
+                  launch_speed >= 98)
+
+# Strike
+rhp <- rhp %>% 
+  mutate(STRIKE = ifelse(description  %in% c("called_strike", "swinging_strike",
+                                           "foul_tip", "bunt_foul_tip", "foul_bunt",
+                                           "swinging_strike_blocked", "missed_bunt"),
+                       1, 0))
+
+
+# Batter Whiff
+batter_stats <- rhp %>% 
+  group_by(batter,
+           pitch_type) %>%
+  summarize(rate = mean(whiff),
+                      pitches = n()) %>% 
+  mutate(pred_bwhiff = (pitches / 300)*rate + ((300-pitches)/300)*0.1561567) %>% 
+  mutate(pred_bwhiff = ifelse(pitches >= 300, rate, pred_bwhiff))
+
+# Merging Whiff Prediction with RHP
+rhp <- rhp %>% 
+  left_join(select(batter_stats, -rate, -pitches), 
+             by = c("batter" = "batter", "pitch_type" = "pitch_type"))
+
+rhp <- rhp %>% 
+  mutate(prev_pitch = ifelse(is.na(prev_pitch), "None", prev_pitch)) %>% 
+  mutate(Count = paste0(balls, "-", strikes)) %>% 
+  mutate(Count = as.factor(Count))
+
+sliders <- rhp %>% 
+  filter(hitter == "R") %>% 
+  filter(pitch_type == "SL") %>% 
+  mutate(count = paste0(balls, "_", strikes),
+         prev_pitch = as.factor(prev_pitch)) %>% 
+  mutate(prev_pitch_ff = ifelse(prev_pitch == "FF", 1, 0))
+  
+fastballs <- rhp %>% 
+  filter(hitter == "R") %>% 
+  filter(pitch_type == fb_type) %>% 
+  mutate(count = paste0(balls, "_", strikes),
+         prev_pitch = as.factor(prev_pitch))
+
+```
+
+
+
+#### BARREL Slider Initial Model
+
+```{r Slider Init Model Barrel, message = FALSE}
+# Initial Model
+sl_model_barrel_all <- glm(Barrel ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
+              count + pfx_total + speed_change + break_change + distance + prev_pitch +
+                speed_fb_diff + pfx_x_fb_diff + pfx_z_fb_diff + release_spin_rate +
+                I(plate_x^2) + I(plate_z^2) + pred_bwhiff,
+              data = sliders, family = binomial)
+
+# Model Evaluation
+summary(sl_model_barrel_all)
+```
+
+#### BARREL Slider Refined Model & Predictions
+Variables Removed:
+zone, count, prev_pitch, pfx_x_fb_diff, release_spin_rate, pred_bwhiff,
+pfx_z_fb_diff, pfx_total, pfx_x, pfx_z, speed_change, break_change, 
+speed_fb_diff, plate_x^2
+```{r Slider Refined Model Barrel, message = FALSE}
+# Refined Model
+sl_model_barrel <- glm(Barrel ~ pitch_speed + plate_x + plate_z +
+              distance + I(plate_z^2),
+              data = sliders, family = binomial)
+
+# Model Evaluation
+summary(sl_model_barrel)
+
+# Model Predictions
+sl_preds_barrel <- sliders %>% 
+  mutate(prediction_log = predict(sl_model_barrel, sliders),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction))
+
+ggplot(sl_preds_barrel, aes(x = prediction, y = as.numeric(Barrel))) +
+  geom_point(alpha = 0.01) +
+  geom_smooth() +
+  geom_smooth(method = "lm") +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  theme_bw()
+```
+
+
+#### BARREL Fastball Initial Model
+
+```{r Fastball Init Model Barrel, message = FALSE}
+# Initial Model
+fb_model_barrel_all <- glm(Barrel ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
+              count + pfx_total + speed_change + break_change + distance + prev_pitch +
+                release_spin_rate +
+                I(plate_x^2) + I(plate_z^2) + pred_bwhiff,
+              data = fastballs, family = binomial)
+
+# Model Evaluation
+summary(fb_model_barrel_all)
+```
+
+#### BARREL Fastball Refined Model & Predictions
+Variables Removed:
+count, zone, prev_pitch, pfx_total, plate_x, pfx_x, plate_x^2, pred_bwhiff
+```{r Fastball Refined Model, message = FALSE}
+# Refined Model
+fb_model_barrel <- glm(Barrel ~ pitch_speed + pfx_z + plate_z +
+              speed_change + break_change + distance +
+                release_spin_rate + I(plate_z^2),
+              data = fastballs, family = binomial)
+
+# Model Evaluation
+summary(fb_model_barrel)
+
+# Model Predictions
+fb_preds_barrel <- fastballs %>% 
+  mutate(prediction_log = predict(fb_model_barrel, fastballs),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction))
+
+ggplot(fb_preds_barrel, aes(x = prediction, y = as.numeric(Barrel))) +
+  geom_point(alpha = 0.01) +
+  geom_smooth() +
+  geom_smooth(method = "lm") +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  theme_bw()
+```
+
+
+#### STRIKE Slider Initial Model
+
+```{r Slider Init Model Strike, message = FALSE}
+# Initial Model
+sl_model_strike_all <- glm(STRIKE ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
+              count + pfx_total + speed_change + break_change + distance + prev_pitch +
+                speed_fb_diff + pfx_x_fb_diff + pfx_z_fb_diff + release_spin_rate +
+                I(plate_x^2) + I(plate_z^2) + pred_bwhiff,
+              data = sliders, family = binomial)
+
+# Model Evaluation
+summary(sl_model_strike_all)
+```
+
+#### STRIKE Slider Refined Model & Predictions
+Variables Removed:
+prev_pitch (replaced with fb_prev), zone, pfx_x_fb_diff, pfx_z, 
+count (replaced with count type), pitch_speed, break_change, pfx_x
+```{r Slider Refined Model Strike, message = FALSE}
+# Refined Model
+
+sliders <- sliders %>% 
+  mutate(fb_prev = ifelse(prev_pitch == "Fastball", 1, 0)) %>% 
+  mutate(count_s = case_when(count  %in% c("0_0", "1_1", "2_2") ~ "Even",
+                             count  %in%  c("1_0", "2_1", "2_0", "3_0", "3_1") ~ "Hitter",
+                             count %in%  c("0_1", "0_2", "1_2") ~ "Pitcher",
+                             count == "3_2" ~ "Full"))
+
+sl_model_strike <- glm(STRIKE ~ plate_x + plate_z +
+              count_s + pfx_total + distance +
+                speed_fb_diff + pfx_z_fb_diff + release_spin_rate +
+                I(plate_x^2) + I(plate_z^2) + pred_bwhiff, fb_prev,
+              data = sliders, family = binomial)
+
+# Model Evaluation
+summary(sl_model_strike)
+
+# Model Predictions
+sl_preds_strike <- sliders %>% 
+  mutate(prediction_log = predict(sl_model_strike, sliders),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction))
+
+ggplot(sl_preds_barrel, aes(x = prediction, y = as.numeric(STRIKE))) +
+  geom_point(alpha = 0.01) +
+  geom_smooth() +
+  geom_smooth(method = "lm") +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  theme_bw()
+```
+
+
+#### STRIKE Fastball Initial Model
+
+```{r Fastball Init Model Strike, message = FALSE}
+# Initial Model
+fb_model_strike_all <- glm(STRIKE ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
+              count + pfx_total + speed_change + break_change + distance + prev_pitch +
+                release_spin_rate + I(plate_x^2) + I(plate_z^2) + pred_bwhiff,
+              data = fastballs, family = binomial)
+
+# Model Evaluation
+summary(fb_model_strike_all)
+```
+
+#### STRIKE Fastball Refined Model & Predictions
+Variables Removed:
+count, zone
+```{r Fastball Refined Model Strike, message = FALSE}
+# Refined Model
+
+fastballs <- fastballs %>% 
+  mutate(fb_prev = ifelse(prev_pitch == "Fastball", 1, 0)) %>% 
+  mutate(count_s = case_when(count  %in% c("0_0", "1_1", "2_2") ~ "Even",
+                             count  %in%  c("1_0", "2_1", "2_0", "3_0", "3_1") ~ "Hitter",
+                             count %in%  c("0_1", "0_2", "1_2") ~ "Pitcher",
+                             count == "3_2" ~ "Full"))
+
+fb_model_strike <- glm(STRIKE ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z +
+              pfx_total + speed_change + break_change + distance + prev_pitch +
+                release_spin_rate + I(plate_x^2) + I(plate_z^2) + pred_bwhiff,
+              data = fastballs, family = binomial)
+
+# Model Evaluation
+summary(fb_model_strike)
+
+# Model Predictions
+fb_preds_strike <- fastballs %>% 
+  mutate(prediction_log = predict(fb_model_strike, fastballs),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction))
+
+# fb_preds_strike %>% 
+#   mutate(prediction = round(prediction, 2)) %>% 
+#   group_by(prediction) %>% 
+#   summarize(n = n(), STRIKE_rate = mean(STRIKE)) %>% 
+#   as.data.frame() %>% 
+#   ggplot(aes(x = prediction, y = STRIKE_rate)) +
+#   geom_point(aes(size = n)) + # size of bin shown on graph
+#   coord_fixed() +
+#   geom_smooth(se = FALSE) +
+#   labs(y = "observed strike rate",
+#        x = "projected strike rate",
+#        title = "Fastball Strike Model Prediction",
+#        subtitle = "Strike rate by predicted strike rate",
+#        caption = "Strike rate have a 1% bin width")
+
+
+ggplot(sl_preds_barrel, aes(x = prediction, y = as.numeric(STRIKE))) +
+  geom_point(alpha = 0.01) +
+  geom_smooth() +
+  geom_smooth(method = "lm") +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  theme_bw()
+```
