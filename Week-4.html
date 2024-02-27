@@ -1082,13 +1082,6 @@ summary(fb_model_strike_all)</code></pre>
 <p>Variables Removed: count, zone</p>
 <pre class="r"><code># Refined Model
 
-fastballs &lt;- fastballs %&gt;% 
-  mutate(fb_prev = ifelse(prev_pitch == &quot;Fastball&quot;, 1, 0)) %&gt;% 
-  mutate(count_s = case_when(count  %in% c(&quot;0_0&quot;, &quot;1_1&quot;, &quot;2_2&quot;) ~ &quot;Even&quot;,
-                             count  %in%  c(&quot;1_0&quot;, &quot;2_1&quot;, &quot;2_0&quot;, &quot;3_0&quot;, &quot;3_1&quot;) ~ &quot;Hitter&quot;,
-                             count %in%  c(&quot;0_1&quot;, &quot;0_2&quot;, &quot;1_2&quot;) ~ &quot;Pitcher&quot;,
-                             count == &quot;3_2&quot; ~ &quot;Full&quot;))
-
 fb_model_strike &lt;- glm(STRIKE ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z +
               pfx_total + speed_change + break_change + distance + prev_pitch +
                 release_spin_rate + I(plate_x^2) + I(plate_z^2) + pred_bwhiff,

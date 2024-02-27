@@ -321,13 +321,6 @@ count, zone
 ```{r Fastball Refined Model Strike, message = FALSE}
 # Refined Model
 
-fastballs <- fastballs %>% 
-  mutate(fb_prev = ifelse(prev_pitch == "Fastball", 1, 0)) %>% 
-  mutate(count_s = case_when(count  %in% c("0_0", "1_1", "2_2") ~ "Even",
-                             count  %in%  c("1_0", "2_1", "2_0", "3_0", "3_1") ~ "Hitter",
-                             count %in%  c("0_1", "0_2", "1_2") ~ "Pitcher",
-                             count == "3_2" ~ "Full"))
-
 fb_model_strike <- glm(STRIKE ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z +
               pfx_total + speed_change + break_change + distance + prev_pitch +
                 release_spin_rate + I(plate_x^2) + I(plate_z^2) + pred_bwhiff,
