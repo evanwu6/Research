@@ -1,5 +1,5 @@
 ---
-title: "Week 4"
+title: "Week 4/5"
 author: "Evan Wu"
 output: 
   html_document:
@@ -47,6 +47,16 @@ geom_plate <- function(pov = "pitcher"){
    g <- geom_polygon(data = df, aes(x = x, y = y), fill = "white", color = "black", linewidth = 1.25)
   g
 }
+
+# Barrel Function
+is.barrel <- function(LA, EV){
+  upper <- 1.11*EV - 78.89
+  lower <- -EV + 124
+  outcome <- (LA >= lower) & (LA <= upper) & (EV >= 98) & (LA >= 8) & (LA <= 50)
+  outcome <- replace_na(outcome, FALSE)
+  outcome
+}
+
 ```
 
 #### Data
@@ -91,23 +101,9 @@ m <- (8 - 26) / (116 - 98)
 b <- 26 - m * 98
 paste0("y = ", round(m, 2), "x + ", round(b, 2))
 
-# Making Limits
-rhp <- rhp %>% 
-  mutate(barrel_upper_lim = case_when(
-    launch_speed <= 98 ~ 30,
-    launch_speed > 98 & launch_speed < 116 ~ (1.11)*launch_speed - 78.89,
-    launch_speed >= 116 ~ 50),
-        barrel_lower_lim = case_when(
-    launch_speed <= 98 ~ 26,
-    launch_speed > 98 & launch_speed < 116 ~ (-1)*launch_speed + 124,
-    launch_speed >= 116 ~ 8)
-    )
-
 # Barrel
 rhp <- rhp %>% 
-  mutate(Barrel = launch_angle <= barrel_upper_lim & 
-                  launch_angle >= barrel_lower_lim &
-                  launch_speed >= 98)
+  mutate(Barrel = is.barrel(LA = launch_angle, EV = launch_speed))
 
 # Strike
 rhp <- rhp %>% 
@@ -119,22 +115,40 @@ rhp <- rhp %>%
 
 # Batter Whiff
 batter_stats <- rhp %>% 
-  group_by(batter,
-           pitch_type) %>%
   summarize(rate = mean(whiff),
-                      pitches = n()) %>% 
-  mutate(pred_bwhiff = (pitches / 300)*rate + ((300-pitches)/300)*0.1561567) %>% 
+                      pitches = n(),
+            .by = c(batter, pitch_type)) %>% 
+  mutate(pitch_whiff = weighted.mean(rate, pitches),
+         .by = pitch_type) %>% 
+  mutate(pred_bwhiff = (pitches / 300)*rate + ((300-pitches)/300)*pitch_whiff) %>% 
   mutate(pred_bwhiff = ifelse(pitches >= 300, rate, pred_bwhiff))
+
 
 # Merging Whiff Prediction with RHP
 rhp <- rhp %>% 
-  left_join(select(batter_stats, -rate, -pitches), 
+  left_join(select(batter_stats, batter, pitch_type, pred_bwhiff), 
              by = c("batter" = "batter", "pitch_type" = "pitch_type"))
 
 rhp <- rhp %>% 
   mutate(prev_pitch = ifelse(is.na(prev_pitch), "None", prev_pitch)) %>% 
   mutate(Count = paste0(balls, "-", strikes)) %>% 
   mutate(Count = as.factor(Count))
+
+
+# Barrel
+batter_stats2 <- rhp %>% 
+  summarize(rate = mean(Barrel),
+                      pitches = n(),
+            .by = c(batter, pitch_type)) %>% 
+  mutate(pitch_barrel = weighted.mean(rate, pitches),
+         .by = pitch_type) %>% 
+  mutate(pred_bbarrel = (pitches / 300)*rate + ((300-pitches)/300)*pitch_barrel) %>% 
+  mutate(pred_bbarrel = ifelse(pitches >= 300, rate, pred_bbarrel))
+
+rhp <- rhp %>% 
+  left_join(select(batter_stats2, batter, pitch_type, pred_bbarrel), 
+             by = c("batter" = "batter", "pitch_type" = "pitch_type"))
+
 
 sliders <- rhp %>% 
   filter(hitter == "R") %>% 
@@ -152,15 +166,133 @@ fastballs <- rhp %>%
 ```
 
 
+#### WHIFF Slider Initial Model
+
+```{r Slider Init Model Whiff, message = FALSE}
+# Initial Model
+sl_model_whiff_all <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
+              count + pfx_total + speed_change + break_change + distance + prev_pitch +
+                speed_fb_diff + pfx_x_fb_diff + pfx_z_fb_diff + release_spin_rate +
+                I(plate_x^2) + I(plate_z^2) + pred_bwhiff,
+              data = sliders, family = binomial)
+
+# Model Evaluation
+summary(sl_model_whiff_all)
+```
+
+#### WHIFF Slider Refined Model & Predictions
+
+Variables Removed:
+
+count
+
+plate_x^2
+
+pfx_x_fb_diff
+
+pfx_z_fb_diff
+
+
+```{r Slider Refined Model Whiff, message = FALSE}
+# Refined Model
+sl_model_whiff <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
+              pfx_total + speed_change + break_change + distance + prev_pitch +
+                speed_fb_diff + release_spin_rate +
+                I(plate_z^2) + pred_bwhiff,
+              data = sliders, family = binomial)
+
+# Model Evaluation
+summary(sl_model_whiff)
+
+# Model Predictions
+sl_preds_whiff <- sliders %>% 
+  mutate(prediction_log = predict(sl_model_whiff, sliders),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction))
+
+ggplot(sl_preds_whiff, aes(x = prediction, y = as.numeric(whiff))) +
+  geom_point(alpha = 0.01) +
+  geom_smooth() +
+  geom_smooth(method = "lm") +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  theme_bw()
+
+```
+Slider Refined Model: 
+
+The model seems to be accurate the expected proportion of the time, except after
+around 0.4. Coincidentally, this is around where the observations thin out.
+This could possibly be a result of a lack of datapoints?
+
+
+#### WHIFF Fastball Initial Model
+
+```{r Fastball Init Model Whiff, message = FALSE}
+# Initial Model
+fb_model_whiff_all <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
+              count + pfx_total + speed_change + break_change + distance + prev_pitch +
+                release_spin_rate + I(plate_x^2) + I(plate_z^2) + pred_bwhiff,
+              data = fastballs, family = binomial)
+
+# Model Evaluation
+summary(fb_model_whiff_all)
+```
+
+#### WHIFF Fastball Refined Model & Predictions
+
+Variables Removed:
+
+count
+
+```{r Fastball Refined Model Whiff, message = FALSE}
+# Refined Model
+fb_model_whiff <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
+              pfx_total + speed_change + break_change + distance + prev_pitch +
+                release_spin_rate + I(plate_x^2) + I(plate_z^2) + pred_bwhiff,
+              data = fastballs, family = binomial)
+
+# Model Evaluation
+summary(fb_model_whiff)
+
+# Model Predictions
+fb_preds_whiff <- fastballs %>% 
+  mutate(prediction_log = predict(fb_model_whiff, fastballs),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction))
+
+ggplot(fb_preds_whiff, aes(x = prediction, y = as.numeric(whiff))) +
+  geom_point(alpha = 0.01) +
+  geom_smooth() +
+  geom_smooth(method = "lm") +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  theme_bw()
+```
+Refined Fastball Model:
+
+It is interesting that every variable besides the count variable was significant.
+The model also diverges from the expected prediction accuracy when the amount
+of observations thins.
+
+
 
 #### BARREL Slider Initial Model
 
 ```{r Slider Init Model Barrel, message = FALSE}
+
+
 # Initial Model
 sl_model_barrel_all <- glm(Barrel ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
               count + pfx_total + speed_change + break_change + distance + prev_pitch +
                 speed_fb_diff + pfx_x_fb_diff + pfx_z_fb_diff + release_spin_rate +
-                I(plate_x^2) + I(plate_z^2) + pred_bwhiff,
+                I(plate_x^2) + I(plate_z^2) + pred_bbarrel,
               data = sliders, family = binomial)
 
 # Model Evaluation
@@ -168,14 +300,35 @@ summary(sl_model_barrel_all)
 ```
 
 #### BARREL Slider Refined Model & Predictions
+
 Variables Removed:
-zone, count, prev_pitch, pfx_x_fb_diff, release_spin_rate, pred_bwhiff,
-pfx_z_fb_diff, pfx_total, pfx_x, pfx_z, speed_change, break_change, 
-speed_fb_diff, plate_x^2
+
+count
+
+pfx_x_fb_diff
+
+release_spin_rate
+
+pfx_z_fb_diff
+
+pfx_total
+
+pfx_x
+
+pfx_z
+
+speed_change
+
+plate_x
+
+break_change
+
+distance
+
 ```{r Slider Refined Model Barrel, message = FALSE}
 # Refined Model
-sl_model_barrel <- glm(Barrel ~ pitch_speed + plate_x + plate_z +
-              distance + I(plate_z^2),
+sl_model_barrel <- glm(Barrel ~ pitch_speed + plate_z + zone +
+              prev_pitch + speed_fb_diff + I(plate_x^2) + I(plate_z^2) + pred_bbarrel,
               data = sliders, family = binomial)
 
 # Model Evaluation
@@ -197,7 +350,12 @@ ggplot(sl_preds_barrel, aes(x = prediction, y = as.numeric(Barrel))) +
   geom_smooth(method = "lm") +
   geom_abline(slope = 1, intercept = 0, color = "red") +
   theme_bw()
+
 ```
+Refined Slider Model: 
+
+The prediction seems to underpredict barrel rate. This might be because
+barrels are so rare with each observation as a pitch.
 
 
 #### BARREL Fastball Initial Model
@@ -206,8 +364,7 @@ ggplot(sl_preds_barrel, aes(x = prediction, y = as.numeric(Barrel))) +
 # Initial Model
 fb_model_barrel_all <- glm(Barrel ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
               count + pfx_total + speed_change + break_change + distance + prev_pitch +
-                release_spin_rate +
-                I(plate_x^2) + I(plate_z^2) + pred_bwhiff,
+                release_spin_rate + I(plate_x^2) + I(plate_z^2) + pred_bbarrel,
               data = fastballs, family = binomial)
 
 # Model Evaluation
@@ -215,13 +372,25 @@ summary(fb_model_barrel_all)
 ```
 
 #### BARREL Fastball Refined Model & Predictions
+
 Variables Removed:
-count, zone, prev_pitch, pfx_total, plate_x, pfx_x, plate_x^2, pred_bwhiff
-```{r Fastball Refined Model, message = FALSE}
+
+count
+
+pfx_total
+
+plate_x
+
+pfx_x
+
+distance
+
+
+```{r Fastball Refined Model Barrel, message = FALSE}
 # Refined Model
-fb_model_barrel <- glm(Barrel ~ pitch_speed + pfx_z + plate_z +
-              speed_change + break_change + distance +
-                release_spin_rate + I(plate_z^2),
+fb_model_barrel <- glm(Barrel ~ pitch_speed + pfx_z + plate_z + zone +
+              break_change + prev_pitch +
+                release_spin_rate + I(plate_x^2) + I(plate_z^2) + pred_bbarrel,
               data = fastballs, family = binomial)
 
 # Model Evaluation
@@ -244,6 +413,15 @@ ggplot(fb_preds_barrel, aes(x = prediction, y = as.numeric(Barrel))) +
   geom_abline(slope = 1, intercept = 0, color = "red") +
   theme_bw()
 ```
+Refined Fastball Model:
+
+For both barrel models, adding predicted barrel whiff (of batter) replaces
+distance. Not exactly sure why. The fastball model also had speed_change
+supplanted by the barrel whiff variable.
+This model seems get underpredict by slightly more as barrel rate/predicted
+barrel rate increases (linearly), while the smooth function severly depreciates in
+accuracy around 0.15 barrel rate. 
+
 
 
 #### STRIKE Slider Initial Model
@@ -253,7 +431,7 @@ ggplot(fb_preds_barrel, aes(x = prediction, y = as.numeric(Barrel))) +
 sl_model_strike_all <- glm(STRIKE ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
               count + pfx_total + speed_change + break_change + distance + prev_pitch +
                 speed_fb_diff + pfx_x_fb_diff + pfx_z_fb_diff + release_spin_rate +
-                I(plate_x^2) + I(plate_z^2) + pred_bwhiff,
+                I(plate_x^2) + I(plate_z^2),
               data = sliders, family = binomial)
 
 # Model Evaluation
@@ -261,9 +439,18 @@ summary(sl_model_strike_all)
 ```
 
 #### STRIKE Slider Refined Model & Predictions
+
 Variables Removed:
-prev_pitch (replaced with fb_prev), zone, pfx_x_fb_diff, pfx_z, 
-count (replaced with count type), pitch_speed, break_change, pfx_x
+
+pfx_x_fb_diff
+
+pitch_speed
+
+pfx_z_fb_diff
+
+speed_change
+
+
 ```{r Slider Refined Model Strike, message = FALSE}
 # Refined Model
 
@@ -274,10 +461,10 @@ sliders <- sliders %>%
                              count %in%  c("0_1", "0_2", "1_2") ~ "Pitcher",
                              count == "3_2" ~ "Full"))
 
-sl_model_strike <- glm(STRIKE ~ plate_x + plate_z +
-              count_s + pfx_total + distance +
-                speed_fb_diff + pfx_z_fb_diff + release_spin_rate +
-                I(plate_x^2) + I(plate_z^2) + pred_bwhiff, fb_prev,
+sl_model_strike <- glm(STRIKE ~ pfx_x + pfx_z + plate_x + plate_z + zone +
+              count_s + pfx_total + break_change + distance + prev_pitch +
+                speed_fb_diff + release_spin_rate +
+                I(plate_x^2) + I(plate_z^2),
               data = sliders, family = binomial)
 
 # Model Evaluation
@@ -293,13 +480,19 @@ sl_preds_strike <- sliders %>%
          )) %>% 
   filter(!is.na(prediction))
 
-ggplot(sl_preds_barrel, aes(x = prediction, y = as.numeric(STRIKE))) +
+ggplot(sl_preds_strike, aes(x = prediction, y = as.numeric(STRIKE))) +
   geom_point(alpha = 0.01) +
   geom_smooth() +
   geom_smooth(method = "lm") +
   geom_abline(slope = 1, intercept = 0, color = "red") +
   theme_bw()
 ```
+Slider Refined Model:
+
+This model also roughly predicts strike rate. As the data thins out,
+the model seems to slightly overpredict strikes. There is also a weird
+dip in predictions from around 0.3 to 0.4, which is intriguing.
+
 
 
 #### STRIKE Fastball Initial Model
@@ -308,7 +501,7 @@ ggplot(sl_preds_barrel, aes(x = prediction, y = as.numeric(STRIKE))) +
 # Initial Model
 fb_model_strike_all <- glm(STRIKE ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
               count + pfx_total + speed_change + break_change + distance + prev_pitch +
-                release_spin_rate + I(plate_x^2) + I(plate_z^2) + pred_bwhiff,
+                release_spin_rate + I(plate_x^2) + I(plate_z^2),
               data = fastballs, family = binomial)
 
 # Model Evaluation
@@ -316,14 +509,21 @@ summary(fb_model_strike_all)
 ```
 
 #### STRIKE Fastball Refined Model & Predictions
+
 Variables Removed:
-count, zone
+
+count
+
+prev_pitch
+
+speed_change
+
 ```{r Fastball Refined Model Strike, message = FALSE}
 # Refined Model
 
-fb_model_strike <- glm(STRIKE ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z +
-              pfx_total + speed_change + break_change + distance + prev_pitch +
-                release_spin_rate + I(plate_x^2) + I(plate_z^2) + pred_bwhiff,
+fb_model_strike <- glm(STRIKE ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
+              count + pfx_total + break_change + distance + 
+                release_spin_rate + I(plate_x^2) + I(plate_z^2),
               data = fastballs, family = binomial)
 
 # Model Evaluation
@@ -355,10 +555,15 @@ fb_preds_strike <- fastballs %>%
 #        caption = "Strike rate have a 1% bin width")
 
 
-ggplot(sl_preds_barrel, aes(x = prediction, y = as.numeric(STRIKE))) +
+ggplot(fb_preds_strike, aes(x = prediction, y = as.numeric(STRIKE))) +
   geom_point(alpha = 0.01) +
   geom_smooth() +
   geom_smooth(method = "lm") +
   geom_abline(slope = 1, intercept = 0, color = "red") +
   theme_bw()
 ```
+
+Fastball Refined Model:
+
+This model seems to be pretty accurate, including extrapolation. There is a similar,
+albeit slightly less pronounced, dip in prediction values between 0.3 and 0.4.
