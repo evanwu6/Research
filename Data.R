@@ -405,7 +405,7 @@ pitchers3 <- pitchers3 %>%
   mutate(pfx_total = sqrt(pfx_x^2 + pfx_z^2)) %>% 
   mutate(break_change = pfx_total - mean(pfx_total), 
          .by = c(pitch_type, game_date, player_id) ) %>% 
-  mutate(distance = sqrt(plate_x^2 + (plate_z - (sz_top - sz_bot)/2)^2)) %>% 
+  mutate(distance = sqrt(plate_x^2 + (plate_z - (sz_top + sz_bot)/2)^2)) %>% 
   mutate(
     on_3b = case_when(
       on_3b > 0 ~ 1,
