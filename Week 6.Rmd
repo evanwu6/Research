@@ -1,5 +1,5 @@
 ---
-title: "Week 4/5"
+title: "Week 6"
 author: "Evan Wu"
 output: 
   html_document:
@@ -167,19 +167,6 @@ fastballs <- rhp %>%
 ```
 
 
-#### WHIFF Slider Initial Model
-
-```{r Slider Init Model Whiff, message = FALSE}
-# Initial Model
-sl_model_whiff_all <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
-              count + pfx_total + speed_change + break_change + distance + prev_pitch +
-                speed_fb_diff + pfx_x_fb_diff + pfx_z_fb_diff + release_spin_rate +
-                I(plate_x^2) + I(plate_z^2) + pred_bwhiff,
-              data = sliders, family = binomial)
-
-# Model Evaluation
-summary(sl_model_whiff_all)
-```
 
 #### WHIFF Slider Refined Model & Predictions
 
@@ -193,36 +180,34 @@ pfx_x_fb_diff
 
 pfx_z_fb_diff
 
+distance
+
 
 ```{r Slider Refined Model Whiff, message = FALSE}
 # Refined Model
 sl_model_whiff <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
-              pfx_total + speed_change + break_change + distance + prev_pitch +
+              pfx_total + speed_change + break_change + prev_pitch +
                 speed_fb_diff + release_spin_rate +
                 I(plate_z^2) + pred_bwhiff,
               data = sliders, family = binomial)
 
 # Model Evaluation
 summary(sl_model_whiff)
-
-# Model Predictions
-sl_preds_whiff <- sliders %>% 
-  mutate(prediction_log = predict(sl_model_whiff, sliders),
+sl_whiff <- augment(sl_model_whiff)
+  
+sl_whiff <- sl_whiff %>% 
+  mutate(prediction_log = predict(sl_model_whiff, sl_whiff),
          prediction = 1 / (1 + exp(-prediction_log)),
          rounded_pred = case_when(
            prediction >= 0.5 ~ 1,
            prediction < 0.5 ~ 0
          )) %>% 
-  filter(!is.na(prediction))
-
-ggplot(sl_preds_whiff, aes(x = prediction, y = as.numeric(whiff))) +
-  geom_point(alpha = 0.01) +
-  geom_smooth() +
-  geom_smooth(method = "lm") +
-  geom_abline(slope = 1, intercept = 0, color = "red") +
-  theme_bw()
+  filter(!is.na(prediction)) %>% 
+  mutate(Response = "whiff",
+         pitch = "slider")
 
 ```
+
 Slider Refined Model: 
 
 The model seems to be accurate the expected proportion of the time, except after
@@ -230,18 +215,8 @@ around 0.4. Coincidentally, this is around where the observations thin out.
 This could possibly be a result of a lack of datapoints?
 
 
-#### WHIFF Fastball Initial Model
 
-```{r Fastball Init Model Whiff, message = FALSE}
-# Initial Model
-fb_model_whiff_all <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
-              count + pfx_total + speed_change + break_change + distance + prev_pitch +
-                release_spin_rate + I(plate_x^2) + I(plate_z^2) + pred_bwhiff,
-              data = fastballs, family = binomial)
 
-# Model Evaluation
-summary(fb_model_whiff_all)
-```
 
 #### WHIFF Fastball Refined Model & Predictions
 
@@ -249,32 +224,35 @@ Variables Removed:
 
 count
 
+plate_x
+
+distance
+
+plate_x +
+
 ```{r Fastball Refined Model Whiff, message = FALSE}
 # Refined Model
 fb_model_whiff <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
-              pfx_total + speed_change + break_change + distance + prev_pitch +
+              pfx_total + speed_change + break_change + prev_pitch +
                 release_spin_rate + I(plate_x^2) + I(plate_z^2) + pred_bwhiff,
               data = fastballs, family = binomial)
 
 # Model Evaluation
 summary(fb_model_whiff)
 
-# Model Predictions
-fb_preds_whiff <- fastballs %>% 
-  mutate(prediction_log = predict(fb_model_whiff, fastballs),
+fb_whiff <- augment(fb_model_whiff)
+  
+fb_whiff <- fb_whiff %>% 
+  mutate(prediction_log = predict(fb_model_whiff, fb_whiff),
          prediction = 1 / (1 + exp(-prediction_log)),
          rounded_pred = case_when(
            prediction >= 0.5 ~ 1,
            prediction < 0.5 ~ 0
          )) %>% 
-  filter(!is.na(prediction))
+  filter(!is.na(prediction)) %>% 
+  mutate(Response = "whiff",
+         pitch = "fastball")
 
-ggplot(fb_preds_whiff, aes(x = prediction, y = as.numeric(whiff))) +
-  geom_point(alpha = 0.01) +
-  geom_smooth() +
-  geom_smooth(method = "lm") +
-  geom_abline(slope = 1, intercept = 0, color = "red") +
-  theme_bw()
 ```
 Refined Fastball Model:
 
@@ -283,22 +261,6 @@ The model also diverges from the expected prediction accuracy when the amount
 of observations thins.
 
 
-
-#### BARREL Slider Initial Model
-
-```{r Slider Init Model Barrel, message = FALSE}
-
-
-# Initial Model
-sl_model_barrel_all <- glm(Barrel ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
-              count + pfx_total + speed_change + break_change + distance + prev_pitch +
-                speed_fb_diff + pfx_x_fb_diff + pfx_z_fb_diff + release_spin_rate +
-                I(plate_x^2) + I(plate_z^2) + pred_bbarrel,
-              data = sliders, family = binomial)
-
-# Model Evaluation
-summary(sl_model_barrel_all)
-```
 
 #### BARREL Slider Refined Model & Predictions
 
@@ -324,33 +286,30 @@ plate_x
 
 break_change
 
-distance
+plate_x +
+
 
 ```{r Slider Refined Model Barrel, message = FALSE}
 # Refined Model
-sl_model_barrel <- glm(Barrel ~ pitch_speed + plate_z + zone +
+sl_model_barrel <- glm(Barrel ~ pitch_speed + plate_z + zone + plate_x +
               prev_pitch + speed_fb_diff + I(plate_x^2) + I(plate_z^2) + pred_bbarrel,
               data = sliders, family = binomial)
 
+
 # Model Evaluation
 summary(sl_model_barrel)
-
-# Model Predictions
-sl_preds_barrel <- sliders %>% 
-  mutate(prediction_log = predict(sl_model_barrel, sliders),
+sl_barrel <- augment(sl_model_barrel)
+  
+sl_barrel <- sl_barrel %>% 
+  mutate(prediction_log = predict(sl_model_barrel, sl_barrel),
          prediction = 1 / (1 + exp(-prediction_log)),
          rounded_pred = case_when(
            prediction >= 0.5 ~ 1,
            prediction < 0.5 ~ 0
          )) %>% 
-  filter(!is.na(prediction))
-
-ggplot(sl_preds_barrel, aes(x = prediction, y = as.numeric(Barrel))) +
-  geom_point(alpha = 0.01) +
-  geom_smooth() +
-  geom_smooth(method = "lm") +
-  geom_abline(slope = 1, intercept = 0, color = "red") +
-  theme_bw()
+  filter(!is.na(prediction)) %>% 
+  mutate(Response = "barrel",
+         pitch = "slider")
 
 ```
 Refined Slider Model: 
@@ -359,18 +318,7 @@ The prediction seems to underpredict barrel rate. This might be because
 barrels are so rare with each observation as a pitch.
 
 
-#### BARREL Fastball Initial Model
 
-```{r Fastball Init Model Barrel, message = FALSE}
-# Initial Model
-fb_model_barrel_all <- glm(Barrel ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
-              count + pfx_total + speed_change + break_change + distance + prev_pitch +
-                release_spin_rate + I(plate_x^2) + I(plate_z^2) + pred_bbarrel,
-              data = fastballs, family = binomial)
-
-# Model Evaluation
-summary(fb_model_barrel_all)
-```
 
 #### BARREL Fastball Refined Model & Predictions
 
@@ -386,33 +334,32 @@ pfx_x
 
 distance
 
+plate_x +
+
+
 
 ```{r Fastball Refined Model Barrel, message = FALSE}
 # Refined Model
 fb_model_barrel <- glm(Barrel ~ pitch_speed + pfx_z + plate_z + zone +
-              break_change + prev_pitch +
+              break_change + prev_pitch + plate_x +
                 release_spin_rate + I(plate_x^2) + I(plate_z^2) + pred_bbarrel,
               data = fastballs, family = binomial)
 
+
 # Model Evaluation
 summary(fb_model_barrel)
-
-# Model Predictions
-fb_preds_barrel <- fastballs %>% 
-  mutate(prediction_log = predict(fb_model_barrel, fastballs),
+fb_barrel <- augment(fb_model_barrel)
+  
+fb_barrel <- fb_barrel %>% 
+  mutate(prediction_log = predict(fb_model_barrel, fb_barrel),
          prediction = 1 / (1 + exp(-prediction_log)),
          rounded_pred = case_when(
            prediction >= 0.5 ~ 1,
            prediction < 0.5 ~ 0
          )) %>% 
-  filter(!is.na(prediction))
-
-ggplot(fb_preds_barrel, aes(x = prediction, y = as.numeric(Barrel))) +
-  geom_point(alpha = 0.01) +
-  geom_smooth() +
-  geom_smooth(method = "lm") +
-  geom_abline(slope = 1, intercept = 0, color = "red") +
-  theme_bw()
+  filter(!is.na(prediction)) %>% 
+  mutate(Response = "barrel",
+         pitch = "fastball")
 ```
 Refined Fastball Model:
 
@@ -424,20 +371,6 @@ barrel rate increases (linearly), while the smooth function severly depreciates 
 accuracy around 0.15 barrel rate. 
 
 
-
-#### STRIKE Slider Initial Model
-
-```{r Slider Init Model Strike, message = FALSE}
-# Initial Model
-sl_model_strike_all <- glm(STRIKE ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
-              count + pfx_total + speed_change + break_change + distance + prev_pitch +
-                speed_fb_diff + pfx_x_fb_diff + pfx_z_fb_diff + release_spin_rate +
-                I(plate_x^2) + I(plate_z^2),
-              data = sliders, family = binomial)
-
-# Model Evaluation
-summary(sl_model_strike_all)
-```
 
 #### STRIKE Slider Refined Model & Predictions
 
@@ -470,23 +403,18 @@ sl_model_strike <- glm(STRIKE ~ pfx_x + pfx_z + plate_x + plate_z + zone +
 
 # Model Evaluation
 summary(sl_model_strike)
-
-# Model Predictions
-sl_preds_strike <- sliders %>% 
-  mutate(prediction_log = predict(sl_model_strike, sliders),
+sl_strike <- augment(sl_model_strike)
+  
+sl_strike <- sl_strike %>% 
+  mutate(prediction_log = predict(sl_model_strike, sl_strike),
          prediction = 1 / (1 + exp(-prediction_log)),
          rounded_pred = case_when(
            prediction >= 0.5 ~ 1,
            prediction < 0.5 ~ 0
          )) %>% 
-  filter(!is.na(prediction))
-
-ggplot(sl_preds_strike, aes(x = prediction, y = as.numeric(STRIKE))) +
-  geom_point(alpha = 0.01) +
-  geom_smooth() +
-  geom_smooth(method = "lm") +
-  geom_abline(slope = 1, intercept = 0, color = "red") +
-  theme_bw()
+  filter(!is.na(prediction)) %>% 
+  mutate(Response = "strike",
+         pitch = "slider")
 ```
 Slider Refined Model:
 
@@ -495,19 +423,6 @@ the model seems to slightly overpredict strikes. There is also a weird
 dip in predictions from around 0.3 to 0.4, which is intriguing.
 
 
-
-#### STRIKE Fastball Initial Model
-
-```{r Fastball Init Model Strike, message = FALSE}
-# Initial Model
-fb_model_strike_all <- glm(STRIKE ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
-              count + pfx_total + speed_change + break_change + distance + prev_pitch +
-                release_spin_rate + I(plate_x^2) + I(plate_z^2),
-              data = fastballs, family = binomial)
-
-# Model Evaluation
-summary(fb_model_strike_all)
-```
 
 #### STRIKE Fastball Refined Model & Predictions
 
@@ -527,41 +442,22 @@ fb_model_strike <- glm(STRIKE ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z 
                 release_spin_rate + I(plate_x^2) + I(plate_z^2),
               data = fastballs, family = binomial)
 
+
 # Model Evaluation
 summary(fb_model_strike)
-
-# Model Predictions
-fb_preds_strike <- fastballs %>% 
-  mutate(prediction_log = predict(fb_model_strike, fastballs),
+fb_strike <- augment(fb_model_strike)
+  
+fb_strike <- fb_strike %>% 
+  mutate(prediction_log = predict(fb_model_strike, fb_strike),
          prediction = 1 / (1 + exp(-prediction_log)),
          rounded_pred = case_when(
            prediction >= 0.5 ~ 1,
            prediction < 0.5 ~ 0
          )) %>% 
-  filter(!is.na(prediction))
+  filter(!is.na(prediction)) %>% 
+  mutate(Response = "strike",
+         pitch = "fastball")
 
-# fb_preds_strike %>% 
-#   mutate(prediction = round(prediction, 2)) %>% 
-#   group_by(prediction) %>% 
-#   summarize(n = n(), STRIKE_rate = mean(STRIKE)) %>% 
-#   as.data.frame() %>% 
-#   ggplot(aes(x = prediction, y = STRIKE_rate)) +
-#   geom_point(aes(size = n)) + # size of bin shown on graph
-#   coord_fixed() +
-#   geom_smooth(se = FALSE) +
-#   labs(y = "observed strike rate",
-#        x = "projected strike rate",
-#        title = "Fastball Strike Model Prediction",
-#        subtitle = "Strike rate by predicted strike rate",
-#        caption = "Strike rate have a 1% bin width")
-
-
-ggplot(fb_preds_strike, aes(x = prediction, y = as.numeric(STRIKE))) +
-  geom_point(alpha = 0.01) +
-  geom_smooth() +
-  geom_smooth(method = "lm") +
-  geom_abline(slope = 1, intercept = 0, color = "red") +
-  theme_bw()
 ```
 
 Fastball Refined Model:
@@ -570,10 +466,127 @@ This model seems to be pretty accurate, including extrapolation. There is a simi
 albeit slightly less pronounced, dip in prediction values between 0.3 and 0.4.
 
 
-```{r}
-sl_model_strike %>%
-  augment() %>% 
-  summarize(mean(.resid),
-            median(.resid)) %>% View
+#### Making Naive Models
+
+```{r Naive Models}
+
+## Intercept-Only Models
+
+# Slider
+
+sl_model_whiff_int <- glm(whiff ~ 1, 
+                      data = sliders, family = binomial) 
+sl_whiff_int <- augment(sl_model_whiff_int)
+
+
+sl_whiff_int <- sl_whiff_int %>% 
+  mutate(prediction_log = predict(sl_model_whiff_int, sl_whiff_int),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction)) %>% 
+  mutate(Response = "whiff",
+         pitch = "slider",
+         type = "intercept only")
+
+
+# Fastball
+
+fb_model_whiff_int <- glm(whiff ~ 1, 
+                      data = fastballs, family = binomial) 
+fb_whiff_int <- augment(fb_model_whiff_int)
+
+
+fb_whiff_int <- fb_whiff_int %>% 
+  mutate(prediction_log = predict(fb_model_whiff_int, fb_whiff_int),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction)) %>% 
+  mutate(Response = "whiff",
+         pitch = "fastball",
+         type = "intercept only")
+
+
+## Zone-Only Models
+
+# Slider
+
+sl_model_whiff_zone <- glm(whiff ~ zone, 
+                      data = sliders, family = binomial) 
+
+sl_whiff_zone <- augment(sl_model_whiff_zone)
+
+
+sl_whiff_zone <- sl_whiff_zone %>% 
+  mutate(prediction_log = predict(sl_model_whiff_zone, sl_whiff_zone),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction)) %>% 
+  mutate(Response = "whiff",
+         pitch = "slider",
+         type = "zone only")
+
+
+# Fastball
+
+fb_model_whiff_zone <- glm(whiff ~ zone, 
+                      data = fastballs, family = binomial) 
+
+fb_whiff_zone <- augment(fb_model_whiff_zone)
+
+
+fb_whiff_zone <- fb_whiff_zone %>% 
+  mutate(prediction_log = predict(fb_model_whiff_zone, fb_whiff_zone),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction)) %>% 
+  mutate(Response = "whiff",
+         pitch = "fastball",
+         type = "zone only")
+
+
+```
+
+
+#### Combining All Models
+
+```{r Combining All Augmented/Predicted}
+
+all_models_data <- bind_rows(
+                    sl_whiff, fb_whiff,
+                    sl_barrel, fb_barrel,
+                    sl_strike, fb_strike,
+                    sl_whiff_int, fb_whiff_int,
+                    sl_whiff_zone, fb_whiff_zone) %>% 
+  select(Response:pitch, type, whiff:pred_bwhiff, `I(plate_x^2)`:count, `.fitted`:rounded_pred)
+
+all_models <- bind_rows(
+  tidy(sl_model_whiff) %>% mutate(Response = "whiff", pitch = "slider", type = "complex"), 
+  tidy(fb_model_whiff) %>% mutate(Response = "whiff", pitch = "fastball", type = "complex"),
+  tidy(sl_model_barrel) %>% mutate(Response = "barrel", pitch = "slider", type = "complex"),
+  tidy(fb_model_barrel) %>% mutate(Response = "barrel", pitch = "fastball", type = "complex"),
+  tidy(sl_model_strike) %>% mutate(Response = "strike", pitch = "slider", type = "complex"),
+  tidy(fb_model_strike) %>% mutate(Response = "strike", pitch = "fastball", type = "complex"),
+  tidy(sl_model_whiff_int) %>% mutate(Response = "whiff", pitch = "slider", 
+                                      type = "intercept only"),
+  tidy(fb_model_whiff_int) %>% mutate(Response = "whiff", pitch = "fastball", 
+                                      type = "intercept only"),
+  tidy(sl_model_whiff_zone) %>% mutate(Response = "whiff", pitch = "slider", 
+                                      type = "zone only"),
+  tidy(fb_model_whiff_zone) %>% mutate(Response = "whiff", pitch = "fastball", 
+                                      type = "zone only")
+)
+
 ```
 
