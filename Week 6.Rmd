@@ -555,6 +555,9 @@ fb_whiff_zone <- fb_whiff_zone %>%
          pitch = "fastball",
          type = "zone only")
 
+all_models_data$type <- all_models_data$type %>% 
+  replace_na("complex")
+
 
 ```
 
