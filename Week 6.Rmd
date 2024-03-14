@@ -24,6 +24,8 @@ library(glmnet)
 library(patchwork)
 library(olsrr)
 library(broom)
+options(scipen = 999)
+library(RColorBrewer)
 ```
 
 
@@ -291,7 +293,7 @@ plate_x +
 
 ```{r Slider Refined Model Barrel, message = FALSE}
 # Refined Model
-sl_model_barrel <- glm(Barrel ~ pitch_speed + plate_z + zone + plate_x +
+sl_model_barrel <- glm(Barrel ~ pitch_speed + plate_z + plate_x +
               prev_pitch + speed_fb_diff + I(plate_x^2) + I(plate_z^2) + pred_bbarrel,
               data = sliders, family = binomial)
 
@@ -340,7 +342,7 @@ plate_x +
 
 ```{r Fastball Refined Model Barrel, message = FALSE}
 # Refined Model
-fb_model_barrel <- glm(Barrel ~ pitch_speed + pfx_z + plate_z + zone +
+fb_model_barrel <- glm(Barrel ~ pitch_speed + pfx_z + plate_z + 
               break_change + prev_pitch + plate_x +
                 release_spin_rate + I(plate_x^2) + I(plate_z^2) + pred_bbarrel,
               data = fastballs, family = binomial)
@@ -360,6 +362,16 @@ fb_barrel <- fb_barrel %>%
   filter(!is.na(prediction)) %>% 
   mutate(Response = "barrel",
          pitch = "fastball")
+
+# No Zone in Fastball?
+
+summarize(fastballs, b = mean(Barrel), d = mean(distance), .by = zone) %>% 
+  arrange(desc(b))
+
+summarize(fastballs, b = mean(Barrel), d = mean(distance), .by = zone) %>% 
+  arrange(desc(b)) %>% 
+  with(cor(d, b))
+
 ```
 Refined Fastball Model:
 
@@ -590,6 +602,55 @@ all_models <- bind_rows(
   tidy(fb_model_whiff_zone) %>% mutate(Response = "whiff", pitch = "fastball", 
                                       type = "zone only")
 )
+```
+
+
+```{r Comparing P-Values of Models}
+
+# P-Value
+all_models %>%
+  filter(type == "complex") %>% 
+  mutate(model_id = paste0(Response, pitch, type)) %>% 
+  group_by(model_id) %>% 
+  ggplot(aes(x = Response, y = term, fill = p.value)) +
+  geom_tile() +
+  facet_wrap(~ pitch) +
+  scale_fill_gradient(limits = c(0, 0.05),
+                      low = "green", high = "yellow", na.value = "lightgray") +
+  theme_classic() +
+  NULL
+
+
+
+# Estimate
+all_models %>%
+  filter(type == "complex") %>% 
+  mutate(model_id = paste0(Response, pitch, type)) %>% 
+  group_by(model_id) %>% 
+  ggplot(aes(x = Response, y = term, fill = estimate)) +
+  geom_tile() +
+  facet_wrap(~ pitch) +
+  scale_fill_brewer(type = "div") +
+  scale_fill_gradient2(low = "red", high = "green", mid = "white", midpoint = 0,
+                       limits = c(-10, 10)) +
+  theme_classic() +
+  NULL
+
+
+# Log Estimate
+all_models %>%
+  filter(type == "complex") %>% 
+  mutate(log_estimate = log(abs(estimate))*(estimate/abs(estimate))) %>% 
+  mutate(model_id = paste0(Response, pitch, type)) %>% 
+  group_by(model_id) %>% 
+  ggplot(aes(x = Response, y = term, fill = log_estimate)) +
+  geom_tile() +
+  facet_wrap(~ pitch) +
+  scale_fill_brewer(type = "div") +
+  scale_fill_gradient2(low = "red", high = "green", mid = "white", midpoint = 0) +
+  theme_classic() +
+  NULL
+  
 
 ```
 
