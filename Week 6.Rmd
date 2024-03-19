@@ -654,3 +654,22 @@ all_models %>%
 
 ```
 
+```{r}
+rhp <- read_csv("CSVs/rhp_pitches.csv") %>% 
+  select(-...1)
+
+lhp <- read_csv("CSVs/lhp_pitches.csv") %>% 
+  select(-...1)
+
+data <- rbind(rhp, lhp)
+
+data %>% 
+  mutate(pitch_speed = round(pitch_speed, 0)) %>% 
+  group_by(p_throws, hitter, pitch_type, pitch_speed) %>% 
+  filter(!is.na(pfx_x)) %>% 
+  filter(!is.na(pfx_z)) %>% 
+  summarize(min_x = min(pfx_x), max_x = max(pfx_x),
+            min_z = min(pfx_z), max_z = max(pfx_z)) %>% 
+  write.csv("Movement.csv")
+```
+
