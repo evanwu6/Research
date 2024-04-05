@@ -1,5 +1,5 @@
 ---
-title: "Week 6"
+title: "Week 7"
 author: "Evan Wu"
 output: 
   html_document:
@@ -137,6 +137,15 @@ rhp <- rhp %>%
   mutate(Count = paste0(balls, "-", strikes)) %>% 
   mutate(Count = as.factor(Count))
 
+# Adding Proportional Distance
+rhp <- rhp %>% 
+  mutate(dist_x = plate_x/0.708333,
+         center = (sz_top + sz_bot) / 2,
+         dist_z = ifelse(plate_z >= center, 
+                         (plate_z - center) / (sz_top - center), 
+                         (plate_z - center) / (center - sz_bot)),
+         dist_prop = sqrt(dist_z^2 + dist_x^2))
+
 
 # Barrel
 batter_stats2 <- rhp %>% 
@@ -170,26 +179,30 @@ fastballs <- rhp %>%
 
 
 
-#### WHIFF Slider Refined Model & Predictions
+
+#### WHIFF Slider Refined Model & Predictions 
 
 Variables Removed:
 
-count
+dist_x = NA
 
-plate_x^2
+count
 
 pfx_x_fb_diff
 
+dist_z
+
 pfx_z_fb_diff
 
-distance
+dist_prop (can also remove distance instead and make it significant)
 
 
 ```{r Slider Refined Model Whiff, message = FALSE}
 # Refined Model
 sl_model_whiff <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
               pfx_total + speed_change + break_change + prev_pitch +
-                speed_fb_diff + release_spin_rate +
+                speed_fb_diff + release_spin_rate + I(plate_x^2) +
+                distance + 
                 I(plate_z^2) + pred_bwhiff,
               data = sliders, family = binomial)
 
@@ -224,18 +237,18 @@ This could possibly be a result of a lack of datapoints?
 
 Variables Removed:
 
+
+dist_x = NA
+
 count
 
-plate_x
-
-distance
-
-plate_x +
+dist_z
 
 ```{r Fastball Refined Model Whiff, message = FALSE}
 # Refined Model
 fb_model_whiff <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
               pfx_total + speed_change + break_change + prev_pitch +
+                distance + dist_prop + 
                 release_spin_rate + I(plate_x^2) + I(plate_z^2) + pred_bwhiff,
               data = fastballs, family = binomial)
 
@@ -673,16 +686,6 @@ data %>%
   write.csv("Movement.csv")
 ```
 
-```{r, Strike Zone, message = FALSE, echo = FALSE}
-rhp <- read_csv("CSVs/rhp_pitches.csv")
-lhp <- read_csv("CSVs/lhp_pitches.csv")
 
-all_data <- rbind(rhp, lhp)
 
-all_data %>% 
-  summarize(Mean_Top = mean(sz_top, na.rm = TRUE),
-            Median_Top = median(sz_top, na.rm = TRUE),
-            Mean_Bottom = mean(sz_bot, na.rm = TRUE),
-            Median_Bottom = median(sz_bot, na.rm = TRUE))
-```
 

@@ -70,6 +70,7 @@ ui <- fluidPage(
                              selected = "Fastball"),
                  
                  uiOutput("speed_ui"),
+           uiOutput("spin_ui")
     ),
      column(3,            
                  uiOutput("movex_ui"),
@@ -151,6 +152,15 @@ server <- function(input, output) {
                 max = max(speed_filter()$pitch_speed, na.rm = TRUE),
                 value = round(mean(speed_filter()$pitch_speed, na.rm = TRUE)),
                 step = 1)
+  })
+  
+  output$spin_ui <- renderUI({
+    sliderInput(inputId = "spin",
+                label = "Spin Rate",
+                min = min(speed_filter()$release_spin_rate, na.rm = TRUE),
+                max = max(speed_filter()$release_spin_rate, na.rm = TRUE),
+                value = round(mean(speed_filter()$release_spin_rate, na.rm = TRUE)),
+                step = 25)
   })
   
   output$movex_ui <- renderUI({
