@@ -686,3 +686,7 @@ all_data %>%
             Median_Bottom = median(sz_bot, na.rm = TRUE))
 ```
 
+```{r}
+# write.csv(all_models, "models1.csv")
+```
+

@@ -40,10 +40,14 @@ ui <- fluidPage(
   
   titlePanel("Pitch Effectiveness Predicter"),
   
-                     
-  fluidRow(
-    column(2,
-             radioButtons(inputId = "p_hand", 
+  tabsetPanel(
+    tabPanel("Tab 1",
+             
+             sidebarLayout(
+               
+               sidebarPanel(
+                 
+                 radioButtons(inputId = "p_hand", 
                               "Pitcher Hand",
                               choices = list("Right" = "R", 
                                              "Left" = "L"),
@@ -54,8 +58,7 @@ ui <- fluidPage(
                               choices = list("Right" = "R", 
                                              "Left" = "L"),
                               selected = "R"),
-    ),
-    column(4,             
+                 
                  selectInput(inputId = "pitch",
                               label = "Pitch Type",
                               choices = c(
@@ -70,39 +73,26 @@ ui <- fluidPage(
                              selected = "Fastball"),
                  
                  uiOutput("speed_ui"),
-           uiOutput("spin_ui")
-    ),
-     column(3,            
+                 
                  uiOutput("movex_ui"),
                  
                  uiOutput("movez_ui"),
-     ),
-    column(6,            
-           
-    )
+                 
+                 textOutput("coord_x"),
+                 textOutput("coord_y")
+               ),
                
-  ),
-  fluidRow(
-        column(3,       
-               plotOutput("zone", click = "plot_click")),
-  
-        column(3,
+               mainPanel(
+                 br(),
+                 plotOutput("zone", click = "plot_click"),
                  plotOutput("zone2", click = "plot_click"),
                  br(),
+                 tableOutput("limits"),
                  br(),
-               ),
-        column(3,
-               plotOutput("zone3", click = "plot_click"),
-               br(),
-               br(),
-        )
-  ),
-  
-  fluidRow(
-    column(12,
-    h1("iocirhofir")
-    )
-    )
+               )
+             )
+    ), 
+  ) # tabPanel end
   
   
 ) # ui Fluid end
@@ -127,7 +117,7 @@ server <- function(input, output) {
                                   ymax = click_coords$y + 0.075),
                 aes(xmin = xmin, ymin = ymin, xmax = xmax, ymax = ymax),
                 fill = "blue", color = "black") +
-      xlim(-2, 2) + ylim(0, 4) + coord_fixed() +
+      xlim(-2, 2) + ylim(-0.5, 5) + coord_fixed() +
       theme_void()
   })
   
@@ -152,15 +142,6 @@ server <- function(input, output) {
                 max = max(speed_filter()$pitch_speed, na.rm = TRUE),
                 value = round(mean(speed_filter()$pitch_speed, na.rm = TRUE)),
                 step = 1)
-  })
-  
-  output$spin_ui <- renderUI({
-    sliderInput(inputId = "spin",
-                label = "Spin Rate",
-                min = min(speed_filter()$release_spin_rate, na.rm = TRUE),
-                max = max(speed_filter()$release_spin_rate, na.rm = TRUE),
-                value = round(mean(speed_filter()$release_spin_rate, na.rm = TRUE)),
-                step = 25)
   })
   
   output$movex_ui <- renderUI({
@@ -191,22 +172,7 @@ server <- function(input, output) {
                                   ymax = click_coords$y + 0.075),
                 aes(xmin = xmin, ymin = ymin, xmax = xmax, ymax = ymax),
                 fill = "blue", color = "black") +
-      xlim(-2, 2) + ylim(0, 4) + coord_fixed() +
-      theme_void()
-  })
-  
-  
-  output$zone3 <- renderPlot({
-    ggplot(data.frame(x = 1, y = 1)) +
-      geom_plate() +
-      geom_zone() +
-      geom_rect(data = data.frame(xmin = click_coords$x - 0.075,
-                                  ymin = click_coords$y - 0.075,
-                                  xmax = click_coords$x + 0.075,
-                                  ymax = click_coords$y + 0.075),
-                aes(xmin = xmin, ymin = ymin, xmax = xmax, ymax = ymax),
-                fill = "blue", color = "black") +
-      xlim(-2, 2) + ylim(0, 4) + coord_fixed() +
+      xlim(-2, 2) + ylim(-0.5, 5) + coord_fixed() +
       theme_void()
   })
   

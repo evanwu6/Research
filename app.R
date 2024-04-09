@@ -1,17 +1,34 @@
 library(tidyverse)
 library(shiny)
 library(shinyjs)
+library(scales)
+library(knitr)
 
 # Data ####
 movement <- read_csv("Movement.csv") %>% 
   mutate(min_x = min_x*12,
          max_x = max_x*12,
          min_z = min_z*12,
-         max_z = max_z*12)
+         max_z = max_z*12) %>% 
+  filter(min_spin != "Inf", 
+         !is.na(pitch_speed))
+
+comp_data <- read_csv("Pitcher_Comps.csv") %>% 
+  select(-...1)
+
+comp_mean <- comp_data %>% 
+  group_by(pitch_hand, pitch_type) %>% 
+  summarize(mean_speed = weighted.mean(avg_speed, pitches_thrown, na.rm = TRUE),
+            mean_spin = weighted.mean(avg_spin, pitches_thrown, na.rm = TRUE),
+            mean_move_x = weighted.mean(pitcher_break_x, pitches_thrown, na.rm = TRUE),
+            mean_move_z = weighted.mean(pitcher_break_z, pitches_thrown, na.rm = TRUE))
+
+model <- read_csv("models1.csv") %>% 
+  select(-...1)
 
 
 # Functions ####
-geom_zone <- function(top = 3.4, bottom = 1.75, linecolor = "black"){
+geom_zone <- function(top = 3.4, bottom = 1.6, linecolor = "black"){
   geom_rect(xmin = -.7083, xmax = .7083, ymin = bottom, ymax = top,
             alpha = 0, color = linecolor, linewidth = 1)
 }
@@ -40,14 +57,10 @@ ui <- fluidPage(
   
   titlePanel("Pitch Effectiveness Predicter"),
   
-  tabsetPanel(
-    tabPanel("Tab 1",
-             
-             sidebarLayout(
-               
-               sidebarPanel(
-                 
-                 radioButtons(inputId = "p_hand", 
+                     
+  fluidRow(
+    column(2,
+             radioButtons(inputId = "p_hand", 
                               "Pitcher Hand",
                               choices = list("Right" = "R", 
                                              "Left" = "L"),
@@ -58,7 +71,8 @@ ui <- fluidPage(
                               choices = list("Right" = "R", 
                                              "Left" = "L"),
                               selected = "R"),
-                 
+    ),
+    column(4,             
                  selectInput(inputId = "pitch",
                               label = "Pitch Type",
                               choices = c(
@@ -73,26 +87,43 @@ ui <- fluidPage(
                              selected = "Fastball"),
                  
                  uiOutput("speed_ui"),
-                 
+           uiOutput("spin_ui")
+    ),
+     column(3,            
                  uiOutput("movex_ui"),
                  
                  uiOutput("movez_ui"),
-                 
-                 textOutput("coord_x"),
-                 textOutput("coord_y")
-               ),
+     ),
+    column(6,            
+           
+    )
                
-               mainPanel(
-                 br(),
-                 plotOutput("zone", click = "plot_click"),
+  ),
+  fluidRow(
+        column(3,       
+               plotOutput("zone", click = "plot_click")),
+  
+        column(3,
                  plotOutput("zone2", click = "plot_click"),
                  br(),
-                 tableOutput("limits"),
                  br(),
-               )
-             )
-    ), 
-  ) # tabPanel end
+               ),
+        column(3,
+               plotOutput("zone3", click = "plot_click"),
+               br(),
+               br(),
+        )
+  ),
+  
+  fluidRow(
+    column(8,
+           tableOutput("comps")
+           ),
+    column(4,
+           h5(textOutput("preds_title")),
+           tableOutput("preds")
+    )
+    )
   
   
 ) # ui Fluid end
@@ -117,7 +148,7 @@ server <- function(input, output) {
                                   ymax = click_coords$y + 0.075),
                 aes(xmin = xmin, ymin = ymin, xmax = xmax, ymax = ymax),
                 fill = "blue", color = "black") +
-      xlim(-2, 2) + ylim(-0.5, 5) + coord_fixed() +
+      xlim(-2, 2) + ylim(0, 4) + coord_fixed() +
       theme_void()
   })
   
@@ -142,6 +173,15 @@ server <- function(input, output) {
                 max = max(speed_filter()$pitch_speed, na.rm = TRUE),
                 value = round(mean(speed_filter()$pitch_speed, na.rm = TRUE)),
                 step = 1)
+  })
+  
+  output$spin_ui <- renderUI({
+    sliderInput(inputId = "spin",
+                label = "Spin Rate",
+                min = floor(min(speed_filter()$min_spin, na.rm = TRUE)/100)*100,
+                max = ceiling(max(speed_filter()$max_spin, na.rm = TRUE)/100)*100,
+                value = 2000,
+                step = 100)
   })
   
   output$movex_ui <- renderUI({
@@ -172,10 +212,92 @@ server <- function(input, output) {
                                   ymax = click_coords$y + 0.075),
                 aes(xmin = xmin, ymin = ymin, xmax = xmax, ymax = ymax),
                 fill = "blue", color = "black") +
-      xlim(-2, 2) + ylim(-0.5, 5) + coord_fixed() +
+      xlim(-2, 2) + ylim(0, 4) + coord_fixed() +
       theme_void()
   })
   
+  
+  output$zone3 <- renderPlot({
+    ggplot(data.frame(x = 1, y = 1)) +
+      geom_plate() +
+      geom_zone() +
+      geom_rect(data = data.frame(xmin = click_coords$x - 0.075,
+                                  ymin = click_coords$y - 0.075,
+                                  xmax = click_coords$x + 0.075,
+                                  ymax = click_coords$y + 0.075),
+                aes(xmin = xmin, ymin = ymin, xmax = xmax, ymax = ymax),
+                fill = "blue", color = "black") +
+      xlim(-2, 2) + ylim(0, 4) + coord_fixed() +
+      theme_void()
+  })
+  
+  
+  output$comps <- renderTable({
+    hand <- input$p_hand
+    pitch <- input$pitch
+    speed <- input$speed
+    spin <- input$spin
+    move_x <- abs(input$movement_x)
+    move_z <- input$movement_z
+    
+    comps <- comp_data %>% 
+      filter(pitch_hand == hand,
+             pitch_type == pitch) %>% 
+      mutate(speed_sim = abs((avg_speed - speed) / comp_mean$mean_speed)) %>% 
+      mutate(spin_sim = abs((avg_spin - spin) / comp_mean$mean_spin)) %>%
+      mutate(bx_sim = abs((pitcher_break_x - move_x) / comp_mean$mean_move_x)) %>% 
+      mutate(bz_sim = abs((pitcher_break_z - move_z) / comp_mean$mean_move_z)) %>% 
+      mutate(similarity = round((4 - rowSums(cbind(speed_sim, spin_sim, bx_sim, bz_sim)))/4, 3)*100)
+    
+    comps %>% 
+      arrange(desc(similarity)) %>% 
+      select(pitcher_name, year, avg_speed, avg_spin, 
+             pitcher_break_x, pitcher_break_z, similarity) %>% 
+      mutate(year = as.character(year),
+             avg_speed = format(avg_speed, nsmall = 1),
+             avg_spin = format(avg_spin, big.mark = ",", nsmall = 0),
+             pitcher_break_x = format(pitcher_break_x, nsmall = 1),
+             pitcher_break_z = format(pitcher_break_z, nsmall = 1),
+             similarity = format(similarity, nsmall = 1)) %>% 
+      head(10)
+    
+  })
+  
+  
+  
+  output$preds <- renderTable({
+    
+    m <- model %>% 
+      filter(pitch == "slider",
+             type == "complex")
+    
+    whiff <- m %>% 
+      filter(Response == "whiff")
+  
+    barrel <- m %>% 
+      filter(Response == "barrel")
+    
+    strike <- m %>% 
+      filter(Response == "strike")
+    
+    
+    pred <- data.frame(
+      "Whiff" = 0.2,
+      "Barrel" = 0.1,
+      "Strike" = 0.6) %>% 
+      mutate(Whiff = scales::percent(Whiff),
+             Barrel = scales::percent(Barrel),
+             Strike = scales::percent(Strike))
+    
+    pred
+    
+    })
+  
+  output$preds_title <- renderText({
+    
+    "Predicted Outcome Likelihood"
+    
+  })
   
 }
 
