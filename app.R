@@ -15,18 +15,21 @@ movement <- read_csv("Movement.csv") %>%
 
 comp_data <- read_csv("Pitcher_Comps.csv") %>% 
   select(-...1) %>% 
-  filter(pitches_thrown >= 100)
+  mutate(`X Movement` = round(`X Movement`*12, 2),
+         `Z Movement` = round(`Z Movement`*12, 2),
+         `Spin Rate` = round(`Spin Rate`, 0),
+         Speed = round(Speed, 1))
 
 comp_mean <- comp_data %>% 
-  group_by(pitch_hand, pitch_type) %>% 
-  summarize(mean_speed = weighted.mean(avg_speed, pitches_thrown, na.rm = TRUE),
-            mean_spin = weighted.mean(avg_spin, pitches_thrown, na.rm = TRUE),
-            mean_move_x = weighted.mean(pitcher_break_x, pitches_thrown, na.rm = TRUE),
-            mean_move_z = weighted.mean(pitcher_break_z, pitches_thrown, na.rm = TRUE),
-            std_speed = sd(avg_speed),
-            std_spin = sd(avg_spin),
-            std_move_x = sd(pitcher_break_x),
-            std_move_z = sd(pitcher_break_z))
+  group_by(p_throws, pitch_type) %>% 
+  summarize(mean_speed = weighted.mean(Speed, Pitches, na.rm = TRUE),
+            mean_spin = weighted.mean(`Spin Rate`, Pitches, na.rm = TRUE),
+            mean_move_x = weighted.mean(`X Movement`, Pitches, na.rm = TRUE),
+            mean_move_z = weighted.mean(`Z Movement`, Pitches, na.rm = TRUE),
+            std_speed = sd(Speed),
+            std_spin = sd(`Spin Rate`),
+            std_move_x = sd(`X Movement`),
+            std_move_z = sd(`Z Movement`))
 
 model <- read_csv("models1.csv") %>% 
   select(-...1)
@@ -250,23 +253,24 @@ server <- function(input, output) {
     move_z <- input$movement_z
     
     comps <- comp_data %>% 
-      filter(pitch_hand == hand) %>% 
-      left_join(comp_mean, by = join_by(pitch_hand, pitch_type)) %>% 
-      mutate(speed_sim = abs((avg_speed - speed) / comp_mean$std_speed)) %>% 
-      mutate(spin_sim = abs((avg_spin - spin) / comp_mean$std_spin)) %>%
-      mutate(bx_sim = abs((pitcher_break_x - move_x) / comp_mean$std_move_x)) %>% 
-      mutate(bz_sim = abs((pitcher_break_z - move_z) / comp_mean$std_move_z)) %>% 
+      filter(p_throws == hand) %>% 
+      left_join(comp_mean, by = join_by(p_throws, pitch_type)) %>% 
+      mutate(speed_sim = abs((Speed - speed) / comp_mean$std_speed)) %>% 
+      mutate(spin_sim = abs((`Spin Rate` - spin) / comp_mean$std_spin)) %>%
+      mutate(bx_sim = abs((`X Movement` - move_x) / comp_mean$std_move_x)) %>% 
+      mutate(bz_sim = abs((`Z Movement` - move_z) / comp_mean$std_move_z)) %>% 
       mutate(similarity = round(rowSums(cbind(speed_sim, spin_sim, bx_sim, bz_sim))/4, 2))
     
     comps %>% 
       arrange(similarity) %>% 
-      select(pitch_type, pitcher_name, year, avg_speed, avg_spin, 
-             pitcher_break_x, pitcher_break_z, similarity) %>% 
-      mutate(year = as.character(year),
-             avg_speed = format(avg_speed, nsmall = 1),
-             avg_spin = format(avg_spin, big.mark = ",", nsmall = 0),
-             pitcher_break_x = format(pitcher_break_x, nsmall = 1),
-             pitcher_break_z = format(pitcher_break_z, nsmall = 1),
+      select(pitch_type, Name, Speed, `Spin Rate`, 
+             `X Movement`, `Z Movement`, 
+             `Whiff Prop`, `Barrel Prop`, `Strike Prop`, similarity) %>% 
+      rename(Pitch = pitch_type) %>% 
+      mutate(Speed = format(Speed, nsmall = 1),
+             `Spin Rate` = format(`Spin Rate`, big.mark = ",", nsmall = 0),
+             `X Movement` = format(`X Movement`, nsmall = 1),
+             `Z Movement` = format(`Z Movement`, nsmall = 1),
              similarity = format(similarity, nsmall = 1)) %>% 
       head(10)
     
