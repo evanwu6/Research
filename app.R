@@ -14,17 +14,26 @@ movement <- read_csv("Movement.csv") %>%
          !is.na(pitch_speed))
 
 comp_data <- read_csv("Pitcher_Comps.csv") %>% 
-  select(-...1)
+  select(-...1) %>% 
+  filter(pitches_thrown >= 100)
 
 comp_mean <- comp_data %>% 
   group_by(pitch_hand, pitch_type) %>% 
   summarize(mean_speed = weighted.mean(avg_speed, pitches_thrown, na.rm = TRUE),
             mean_spin = weighted.mean(avg_spin, pitches_thrown, na.rm = TRUE),
             mean_move_x = weighted.mean(pitcher_break_x, pitches_thrown, na.rm = TRUE),
-            mean_move_z = weighted.mean(pitcher_break_z, pitches_thrown, na.rm = TRUE))
+            mean_move_z = weighted.mean(pitcher_break_z, pitches_thrown, na.rm = TRUE),
+            std_speed = sd(avg_speed),
+            std_spin = sd(avg_spin),
+            std_move_x = sd(pitcher_break_x),
+            std_move_z = sd(pitcher_break_z))
 
 model <- read_csv("models1.csv") %>% 
   select(-...1)
+
+comp_data %>% 
+  group_by(pitch_type) %>% 
+  summarize(n = n()) %>% view
 
 
 # Functions ####
@@ -241,17 +250,17 @@ server <- function(input, output) {
     move_z <- input$movement_z
     
     comps <- comp_data %>% 
-      filter(pitch_hand == hand,
-             pitch_type == pitch) %>% 
-      mutate(speed_sim = abs((avg_speed - speed) / comp_mean$mean_speed)) %>% 
-      mutate(spin_sim = abs((avg_spin - spin) / comp_mean$mean_spin)) %>%
-      mutate(bx_sim = abs((pitcher_break_x - move_x) / comp_mean$mean_move_x)) %>% 
-      mutate(bz_sim = abs((pitcher_break_z - move_z) / comp_mean$mean_move_z)) %>% 
-      mutate(similarity = round((4 - rowSums(cbind(speed_sim, spin_sim, bx_sim, bz_sim)))/4, 3)*100)
+      filter(pitch_hand == hand) %>% 
+      left_join(comp_mean, by = join_by(pitch_hand, pitch_type)) %>% 
+      mutate(speed_sim = abs((avg_speed - speed) / comp_mean$std_speed)) %>% 
+      mutate(spin_sim = abs((avg_spin - spin) / comp_mean$std_spin)) %>%
+      mutate(bx_sim = abs((pitcher_break_x - move_x) / comp_mean$std_move_x)) %>% 
+      mutate(bz_sim = abs((pitcher_break_z - move_z) / comp_mean$std_move_z)) %>% 
+      mutate(similarity = round(rowSums(cbind(speed_sim, spin_sim, bx_sim, bz_sim))/4, 2))
     
     comps %>% 
-      arrange(desc(similarity)) %>% 
-      select(pitcher_name, year, avg_speed, avg_spin, 
+      arrange(similarity) %>% 
+      select(pitch_type, pitcher_name, year, avg_speed, avg_spin, 
              pitcher_break_x, pitcher_break_z, similarity) %>% 
       mutate(year = as.character(year),
              avg_speed = format(avg_speed, nsmall = 1),
