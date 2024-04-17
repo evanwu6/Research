@@ -31,12 +31,11 @@ comp_mean <- comp_data %>%
             std_move_x = sd(`X Movement`),
             std_move_z = sd(`Z Movement`))
 
-model <- read_csv("models1.csv") %>% 
+model <- read_csv("models2.csv") %>% 
   select(-...1)
 
-comp_data %>% 
-  group_by(pitch_type) %>% 
-  summarize(n = n()) %>% view
+pred_means <- read_csv("pred means.csv") %>% 
+  select(-...1)
 
 
 # Functions ####
@@ -249,7 +248,7 @@ server <- function(input, output) {
     pitch <- input$pitch
     speed <- input$speed
     spin <- input$spin
-    move_x <- abs(input$movement_x)
+    move_x <- input$movement_x
     move_z <- input$movement_z
     
     comps <- comp_data %>% 
@@ -280,9 +279,41 @@ server <- function(input, output) {
   
   output$preds <- renderTable({
     
+    pitch <- ifelse(input$pitch == "FF", "fastball", "slider")
+    pitch_speed <- input$speed
+    pfx_x <- input$movement_x
+    pfx_z <- input$movement_z
+    pfx_total <- sqrt(pfx_x^2 + pfx_z^2)
+    plate_x <- click_coords$x
+    plate_z <- click_coords$y
+    dist_x <- plate_x/0.708333
+    dist_z <- ifelse(plate_z >= 2.5, 
+                     (plate_z - 2.5) / (3.4 - 2.5), 
+                     (plate_z - 2.5) / (2.5 - 1.6))
+    dist_prop <- sqrt(dist_z^2 + dist_x^2)
+    release_spin_rate <- input$spin
+    
+    zone <- case_when(
+        plate_x <= (-17/72) & plate_x >= (-39/48) & plate_z >= (2.8) & plate_z <= 3.4 ~ 3,
+        plate_x >= (-17/72) & plate_x < (17/72) & plate_z >= (2.8) & plate_z <= 3.4 ~ 2,
+        plate_x >= (17/72) & plate_x <= (39/48) & plate_z >= (2.8) & plate_z <= 3.4 ~ 1,
+        
+        plate_x <= (-17/72) & plate_x >= (-39/48) & plate_z >= (2.2) & plate_z < (2.8) ~ 6,
+        plate_x >= (-17/72) & plate_x < (17/72) & plate_z >= (2.2) & plate_z < (2.8) ~ 5,
+        plate_x >= (17/72) & plate_x <= (39/48) & plate_z >= (2.2) & plate_z < (2.8) ~ 4,
+        
+        plate_x <= (-17/72) & plate_x >= (-39/48) & plate_z <= (2.2) & plate_z >= 1.6 ~ 9,
+        plate_x >= (-17/72) & plate_x < (17/72) & plate_z <= (2.2) & plate_z >= 1.6 ~ 8,
+        plate_x >= (17/72) & plate_x <= (39/48) & plate_z <= (2.2) & plate_z >= 1.6 ~ 7,
+        
+        plate_x >= 0 & plate_x <= (121/48) & plate_z >= 2.5 ~ 11,
+        plate_x <= 0 & plate_x >= (-121/48) & plate_z >= 2.5 ~ 12,
+        plate_x >= 0 & plate_x <= (121/48) & plate_z < 2.5 ~ 13,
+        plate_x <= 0 & plate_x >= (-121/48) & plate_z < 2.5 ~ 14)
+    
     m <- model %>% 
-      filter(pitch == "slider",
-             type == "complex")
+      filter(Hand == input$b_hand,
+             Pitch == pitch)
     
     whiff <- m %>% 
       filter(Response == "whiff")
@@ -293,6 +324,10 @@ server <- function(input, output) {
     strike <- m %>% 
       filter(Response == "strike")
     
+    preds <- pred_means %>% 
+      filter(hitter == input$b_hand,
+             pitch_type == input$pitch)
+    
     
     pred <- data.frame(
       "Whiff" = 0.2,
@@ -302,7 +337,10 @@ server <- function(input, output) {
              Barrel = scales::percent(Barrel),
              Strike = scales::percent(Strike))
     
-    pred
+    
+    t <- data.frame(pitch, pitch_speed, pfx_x, pfx_z, pfx_total, plate_x, plate_z, dist_x, dist_z, dist_prop, release_spin_rate, zone)
+    
+    t
     
     })
   
