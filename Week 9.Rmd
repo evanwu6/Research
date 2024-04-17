@@ -89,9 +89,7 @@ rhp <- read_csv("CSVs/rhp_pitches.csv") %>%
   select(-...1) %>% 
   filter(!is.na(pfx_z)) %>% 
   mutate(distance_sweet = sqrt(((plate_x - 0.85)^2)+((plate_z - 1.55)^2))) %>% 
-  mutate(zone = case_when(distance < 2 ~ zone,
-                          distance >= 2 & plate_z > (sz_top + sz_bot)/2 ~ 16,
-                          distance >= 2 & plate_z <= (sz_top + sz_bot)/2 ~ 17)) %>% 
+  filter(distance < 2) %>% 
   mutate(ab_id = paste0(game_date, "_", player_id, "_", at_bat_number),
          prev_ab_id = lead(ab_id, 1)) %>% 
   mutate(prev_pitch = ifelse(ab_id == prev_ab_id, lead(pitch_type, 1), NA)) %>% 
@@ -102,17 +100,6 @@ rhp <- read_csv("CSVs/rhp_pitches.csv") %>%
                                 prev_pitch  %in% c("CH", "FS") ~ "Off Speed")) %>% 
   mutate(zone = relevel(as.factor(zone), ref = 5))
 
-# New Code for Barrels
-
-# Upper Limit
-m <- (50 - 30) / (116 - 98)
-b <- 30 - m * 98
-paste0("y = ", round(m, 2), "x ", round(b, 2))
-
-# Lower Limit
-m <- (8 - 26) / (116 - 98)
-b <- 26 - m * 98
-paste0("y = ", round(m, 2), "x + ", round(b, 2))
 
 # Barrel
 rhp <- rhp %>% 
@@ -349,19 +336,11 @@ fb_r_whiff <- glm(whiff ~ pitch_speed + pfx_z + pfx_total + zone + dist_x + dist
 # Removed: pfx_x
 
 # Model Evaluation
-# summary(fb_r_whiff)
+summary(fb_r_whiff)
 
-fb_r_whiff_test <- augment(fb_r_whiff)
-  
-fb_r_whiff_test <- fb_r_whiff_test %>% 
-  mutate(prediction_log = predict(fb_r_whiff, fb_r_whiff_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction >= 0.5 ~ 1,
-           prediction < 0.5 ~ 0
-         )) %>% 
-  filter(!is.na(prediction)) %>% 
-  mutate(Response = "whiff",
+fb_r_whiff_test <- augment(fb_r_whiff, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
+   mutate(Response = "whiff",
          Hand = "right",
          pitch = "fastball")
 
@@ -373,25 +352,17 @@ rmse(fb_r_whiff_test$prediction, fb_r_whiff_test$whiff)
 # Barrel ####
 
 # Refined Model
-fb_r_barrel <- glm(Barrel ~ pitch_speed + dist_x + dist_z +
-                  I(dist_x^2) + I(dist_z^2) + release_spin_rate + pred_bwhiff,
+fb_r_barrel <- glm(Barrel ~ pitch_speed + dist_x + dist_z + zone +
+                  I(dist_x^2) + I(dist_z^2) + pred_bbarrel,
               data = fb_r, family = binomial)
 
-# Removed: pfx_z, dist_prop, pfx_x, pfx_total, zone (multiple at 0.05-0.06)
+# Removed: pfx_x, dist_prop, pfx_total, pfx_z, release_spin_rate
 
 # Model Evaluation
-# summary(fb_r_barrel)
+summary(fb_r_barrel)
 
-fb_r_barrel_test <- augment(fb_r_barrel)
-  
-fb_r_barrel_test <- fb_r_barrel_test %>% 
-  mutate(prediction_log = predict(fb_r_barrel, fb_r_barrel_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction >= 0.5 ~ 1,
-           prediction < 0.5 ~ 0
-         )) %>% 
-  filter(!is.na(prediction)) %>% 
+fb_r_barrel_test <- augment(fb_r_barrel, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
   mutate(Response = "barrel",
          Hand = "right",
          pitch = "fastball")
@@ -414,16 +385,8 @@ fb_r_strike <- glm(STRIKE ~ pfx_z + zone + dist_x + dist_z +
 # Model Evaluation
 # summary(fb_r_strike)
 
-fb_r_strike_test <- augment(fb_r_strike)
-  
-fb_r_strike_test <- fb_r_strike_test %>% 
-  mutate(prediction_log = predict(fb_r_strike, fb_r_strike_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction >= 0.5 ~ 1,
-           prediction < 0.5 ~ 0
-         )) %>% 
-  filter(!is.na(prediction)) %>% 
+fb_r_strike_test <- augment(fb_r_strike, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>%
   mutate(Response = "strike",
          Hand = "right",
          pitch = "fastball")
@@ -435,7 +398,7 @@ rmse(fb_r_strike_test$prediction, fb_r_strike_test$STRIKE)
 
 
 
-### Four Seam Fastballs RHP to RHH
+### Four Seam Fastballs RHP to LHH
 
 ##### Whiff - Removed: pfx_x, pfx_z
 ##### Barrel - Removed: release_spin_rate + pfx_total
@@ -461,16 +424,8 @@ fb_l_whiff <- glm(whiff ~ pitch_speed + pfx_total + zone + dist_x + dist_z +
 # Model Evaluation
 # summary(fb_l_whiff)
 
-fb_l_whiff_test <- augment(fb_l_whiff)
-  
-fb_l_whiff_test <- fb_l_whiff_test %>% 
-  mutate(prediction_log = predict(fb_l_whiff, fb_l_whiff_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction >= 0.5 ~ 1,
-           prediction < 0.5 ~ 0
-         )) %>% 
-  filter(!is.na(prediction)) %>% 
+fb_l_whiff_test <- augment(fb_l_whiff, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
   mutate(Response = "whiff",
          Hand = "left",
          pitch = "fastball")
@@ -493,16 +448,8 @@ fb_l_barrel <- glm(Barrel ~ pitch_speed + pfx_x + zone + dist_x +
 # Model Evaluation
 # summary(fb_l_barrel)
 
-fb_l_barrel_test <- augment(fb_l_barrel)
-  
-fb_l_barrel_test <- fb_l_barrel_test %>% 
-  mutate(prediction_log = predict(fb_l_barrel, fb_l_barrel_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction >= 0.5 ~ 1,
-           prediction < 0.5 ~ 0
-         )) %>% 
-  filter(!is.na(prediction)) %>% 
+fb_l_barrel_test <- augment(fb_l_barrel, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
   mutate(Response = "barrel",
          Hand = "left",
          pitch = "fastball")
@@ -526,16 +473,8 @@ fb_l_strike <- glm(STRIKE ~ pitch_speed + pfx_total + zone + dist_x + dist_z +
 # Model Evaluation
 # summary(fb_l_strike)
 
-fb_l_strike_test <- augment(fb_l_strike)
-  
-fb_l_strike_test <- fb_l_strike_test %>% 
-  mutate(prediction_log = predict(fb_l_strike, fb_l_strike_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction >= 0.5 ~ 1,
-           prediction < 0.5 ~ 0
-         )) %>% 
-  filter(!is.na(prediction)) %>% 
+fb_l_strike_test <- augment(fb_l_strike, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
   mutate(Response = "strike",
          Hand = "left",
          pitch = "fastball")
@@ -546,7 +485,7 @@ rmse(fb_l_strike_test$prediction, fb_l_strike_test$STRIKE)
 
 
 
-### Sliders Fastballs RHP to RHH
+### Sliders RHP to RHH
 
 ##### Whiff - Removed: pitch_speed
 ##### Barrel - Removed: release_spin_rate, pfx_total, dist_prop, zone, pfx_x, pfx_z, pitch_speed
@@ -572,16 +511,8 @@ sl_r_whiff <- glm(whiff ~ pfx_x + pfx_z + pfx_total + zone + dist_x + dist_z +
 # Model Evaluation
 # summary(sl_r_whiff)
 
-sl_r_whiff_test <- augment(sl_r_whiff)
-  
-sl_r_whiff_test <- sl_r_whiff_test %>% 
-  mutate(prediction_log = predict(sl_r_whiff, sl_r_whiff_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction >= 0.5 ~ 1,
-           prediction < 0.5 ~ 0
-         )) %>% 
-  filter(!is.na(prediction)) %>% 
+sl_r_whiff_test <- augment(sl_r_whiff, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
   mutate(Response = "whiff",
          Hand = "right",
          pitch = "slider")
@@ -605,24 +536,14 @@ sl_r_barrel <- glm(Barrel ~ dist_x + dist_z +
 # Model Evaluation
 # summary(sl_r_barrel)
 
-sl_r_barrel_test <- augment(sl_r_barrel)
-  
-sl_r_barrel_test <- sl_r_barrel_test %>% 
-  mutate(prediction_log = predict(sl_r_barrel, sl_r_barrel_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction >= 0.5 ~ 1,
-           prediction < 0.5 ~ 0
-         )) %>% 
-  filter(!is.na(prediction)) %>% 
+sl_r_barrel_test <- augment(sl_r_barrel, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
   mutate(Response = "barrel",
          Hand = "right",
          pitch = "slider")
 
 
 rmse(sl_r_barrel_test$prediction, sl_r_barrel_test$Barrel)
-
-
 
 
 
@@ -640,16 +561,8 @@ sl_r_strike <- glm(STRIKE ~ pitch_speed + pfx_x + pfx_z + pfx_total + zone + dis
 # Model Evaluation
 # summary(sl_r_strike)
 
-sl_r_strike_test <- augment(sl_r_strike)
-  
-sl_r_strike_test <- sl_r_strike_test %>% 
-  mutate(prediction_log = predict(sl_r_strike, sl_r_strike_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction >= 0.5 ~ 1,
-           prediction < 0.5 ~ 0
-         )) %>% 
-  filter(!is.na(prediction)) %>% 
+sl_r_strike_test <- augment(sl_r_strike, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
   mutate(Response = "strike",
          Hand = "right",
          pitch = "slider")
@@ -663,7 +576,7 @@ rmse(sl_r_strike_test$prediction, sl_r_strike_test$STRIKE)
 
 
 
-### Sliders Fastballs RHP to LHH
+### Sliders RHP to LHH
 
 ##### Whiff - Removed: pfx_z, pfx_x, pfx_total
 ##### Barrel - Removed: pfx_total, dist_prop, release_spin_rate
@@ -689,20 +602,11 @@ sl_l_whiff <- glm(whiff ~ pitch_speed + zone + dist_x + dist_z +
 # Model Evaluation
 # summary(sl_l_whiff)
 
-sl_l_whiff_test <- augment(sl_l_whiff)
-  
-sl_l_whiff_test <- sl_l_whiff_test %>% 
-  mutate(prediction_log = predict(sl_l_whiff, sl_l_whiff_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction >= 0.5 ~ 1,
-           prediction < 0.5 ~ 0
-         )) %>% 
-  filter(!is.na(prediction)) %>% 
+sl_l_whiff_test <- augment(sl_l_whiff, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
   mutate(Response = "whiff",
          Hand = "left",
          pitch = "slider")
-
 
 rmse(sl_l_whiff_test$prediction, sl_l_whiff_test$whiff)
 
@@ -722,16 +626,8 @@ sl_l_barrel <- glm(Barrel ~ pitch_speed + pfx_x + pfx_z + zone + dist_x + dist_z
 # Model Evaluation
 # summary(sl_l_barrel)
 
-sl_l_barrel_test <- augment(sl_l_barrel)
-  
-sl_l_barrel_test <- sl_l_barrel_test %>% 
-  mutate(prediction_log = predict(sl_l_barrel, sl_l_barrel_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction >= 0.5 ~ 1,
-           prediction < 0.5 ~ 0
-         )) %>% 
-  filter(!is.na(prediction)) %>% 
+sl_l_barrel_test <- augment(sl_l_barrel, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
   mutate(Response = "barrel",
          Hand = "left",
          pitch = "slider")
@@ -757,16 +653,8 @@ sl_l_strike <- glm(STRIKE ~ pfx_x + pfx_total + zone + dist_x + dist_z +
 # Model Evaluation
 # summary(sl_l_strike)
 
-sl_l_strike_test <- augment(sl_l_strike)
-  
-sl_l_strike_test <- sl_l_strike_test %>% 
-  mutate(prediction_log = predict(sl_l_strike, sl_l_strike_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction >= 0.5 ~ 1,
-           prediction < 0.5 ~ 0
-         )) %>% 
-  filter(!is.na(prediction)) %>% 
+sl_l_strike_test <- augment(sl_l_strike, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
   mutate(Response = "strike",
          Hand = "left",
          pitch = "slider")

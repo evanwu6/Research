@@ -515,9 +515,7 @@ bunts.</p>
   select(-...1) %&gt;% 
   filter(!is.na(pfx_z)) %&gt;% 
   mutate(distance_sweet = sqrt(((plate_x - 0.85)^2)+((plate_z - 1.55)^2))) %&gt;% 
-  mutate(zone = case_when(distance &lt; 2 ~ zone,
-                          distance &gt;= 2 &amp; plate_z &gt; (sz_top + sz_bot)/2 ~ 16,
-                          distance &gt;= 2 &amp; plate_z &lt;= (sz_top + sz_bot)/2 ~ 17)) %&gt;% 
+  filter(distance &lt; 2) %&gt;% 
   mutate(ab_id = paste0(game_date, &quot;_&quot;, player_id, &quot;_&quot;, at_bat_number),
          prev_ab_id = lead(ab_id, 1)) %&gt;% 
   mutate(prev_pitch = ifelse(ab_id == prev_ab_id, lead(pitch_type, 1), NA)) %&gt;% 
@@ -528,19 +526,8 @@ bunts.</p>
                                 prev_pitch  %in% c(&quot;CH&quot;, &quot;FS&quot;) ~ &quot;Off Speed&quot;)) %&gt;% 
   mutate(zone = relevel(as.factor(zone), ref = 5))
 
-# New Code for Barrels
 
-# Upper Limit
-m &lt;- (50 - 30) / (116 - 98)
-b &lt;- 30 - m * 98
-paste0(&quot;y = &quot;, round(m, 2), &quot;x &quot;, round(b, 2))</code></pre>
-<pre><code>## [1] &quot;y = 1.11x -78.89&quot;</code></pre>
-<pre class="r"><code># Lower Limit
-m &lt;- (8 - 26) / (116 - 98)
-b &lt;- 26 - m * 98
-paste0(&quot;y = &quot;, round(m, 2), &quot;x + &quot;, round(b, 2))</code></pre>
-<pre><code>## [1] &quot;y = -1x + 124&quot;</code></pre>
-<pre class="r"><code># Barrel
+# Barrel
 rhp &lt;- rhp %&gt;% 
   mutate(Barrel = is.barrel(LA = launch_angle, EV = launch_speed))
 
@@ -774,54 +761,116 @@ fb_r_whiff &lt;- glm(whiff ~ pitch_speed + pfx_z + pfx_total + zone + dist_x + d
 # Removed: pfx_x
 
 # Model Evaluation
-# summary(fb_r_whiff)
-
-fb_r_whiff_test &lt;- augment(fb_r_whiff)
-  
-fb_r_whiff_test &lt;- fb_r_whiff_test %&gt;% 
-  mutate(prediction_log = predict(fb_r_whiff, fb_r_whiff_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction &gt;= 0.5 ~ 1,
-           prediction &lt; 0.5 ~ 0
-         )) %&gt;% 
-  filter(!is.na(prediction)) %&gt;% 
-  mutate(Response = &quot;whiff&quot;,
+summary(fb_r_whiff)</code></pre>
+<pre><code>## 
+## Call:
+## glm(formula = whiff ~ pitch_speed + pfx_z + pfx_total + zone + 
+##     dist_x + dist_z + dist_prop + I(dist_x^2) + I(dist_z^2) + 
+##     release_spin_rate + pred_bwhiff, family = binomial, data = fb_r)
+## 
+## Coefficients:
+##                      Estimate  Std. Error z value             Pr(&gt;|z|)    
+## (Intercept)       -14.6937073   0.8248886 -17.813 &lt; 0.0000000000000002 ***
+## pitch_speed         0.0975846   0.0089111  10.951 &lt; 0.0000000000000002 ***
+## pfx_z               1.2165440   0.1778939   6.839      0.0000000000080 ***
+## pfx_total          -1.1841309   0.1796530  -6.591      0.0000000000436 ***
+## zone1              -0.1123999   0.1541111  -0.729              0.46579    
+## zone2              -0.2153199   0.1180569  -1.824              0.06817 .  
+## zone3              -0.1225799   0.1421059  -0.863              0.38836    
+## zone4              -0.4696484   0.1462534  -3.211              0.00132 ** 
+## zone6               0.0242268   0.1190134   0.204              0.83869    
+## zone7              -0.4450462   0.2750074  -1.618              0.10560    
+## zone8               0.0534662   0.1697311   0.315              0.75276    
+## zone9              -0.0469113   0.1920345  -0.244              0.80701    
+## zone11              0.2622522   0.1742131   1.505              0.13223    
+## zone12             -0.1398467   0.1662101  -0.841              0.40013    
+## zone13              0.2911385   0.2907041   1.001              0.31659    
+## zone14              0.1943540   0.2084334   0.932              0.35110    
+## dist_x              0.0741226   0.0565402   1.311              0.18987    
+## dist_z              1.1248123   0.0953301  11.799 &lt; 0.0000000000000002 ***
+## dist_prop           0.8053002   0.2593836   3.105              0.00190 ** 
+## I(dist_x^2)        -0.8307656   0.0969205  -8.572 &lt; 0.0000000000000002 ***
+## I(dist_z^2)        -0.8950979   0.0985231  -9.085 &lt; 0.0000000000000002 ***
+## release_spin_rate   0.0006806   0.0001351   5.039      0.0000004668072 ***
+## pred_bwhiff        17.7490683   0.7546227  23.520 &lt; 0.0000000000000002 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## (Dispersion parameter for binomial family taken to be 1)
+## 
+##     Null deviance: 19919  on 30239  degrees of freedom
+## Residual deviance: 17754  on 30217  degrees of freedom
+##   (60 observations deleted due to missingness)
+## AIC: 17800
+## 
+## Number of Fisher Scoring iterations: 6</code></pre>
+<pre class="r"><code>fb_r_whiff_test &lt;- augment(fb_r_whiff, type.predict = &quot;response&quot;) %&gt;% 
+  rename(prediction = `.fitted`) %&gt;% 
+   mutate(Response = &quot;whiff&quot;,
          Hand = &quot;right&quot;,
          pitch = &quot;fastball&quot;)
 
 
 rmse(fb_r_whiff_test$prediction, fb_r_whiff_test$whiff)</code></pre>
-<pre><code>## [1] 0.2841343</code></pre>
+<pre><code>## [1] 0.2912946</code></pre>
 <pre class="r"><code># Barrel ####
 
 # Refined Model
-fb_r_barrel &lt;- glm(Barrel ~ pitch_speed + dist_x + dist_z +
-                  I(dist_x^2) + I(dist_z^2) + release_spin_rate + pred_bwhiff,
+fb_r_barrel &lt;- glm(Barrel ~ pitch_speed + dist_x + dist_z + zone +
+                  I(dist_x^2) + I(dist_z^2) + pred_bbarrel,
               data = fb_r, family = binomial)
 
-# Removed: pfx_z, dist_prop, pfx_x, pfx_total, zone (multiple at 0.05-0.06)
+# Removed: pfx_x, dist_prop, pfx_total, pfx_z, release_spin_rate
 
 # Model Evaluation
-# summary(fb_r_barrel)
-
-fb_r_barrel_test &lt;- augment(fb_r_barrel)
-  
-fb_r_barrel_test &lt;- fb_r_barrel_test %&gt;% 
-  mutate(prediction_log = predict(fb_r_barrel, fb_r_barrel_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction &gt;= 0.5 ~ 1,
-           prediction &lt; 0.5 ~ 0
-         )) %&gt;% 
-  filter(!is.na(prediction)) %&gt;% 
+summary(fb_r_barrel)</code></pre>
+<pre><code>## 
+## Call:
+## glm(formula = Barrel ~ pitch_speed + dist_x + dist_z + zone + 
+##     I(dist_x^2) + I(dist_z^2) + pred_bbarrel, family = binomial, 
+##     data = fb_r)
+## 
+## Coefficients:
+##               Estimate Std. Error z value             Pr(&gt;|z|)    
+## (Intercept)    3.66983    1.65773   2.214               0.0268 *  
+## pitch_speed   -0.09129    0.01765  -5.172   0.0000002321111740 ***
+## dist_x        -0.06514    0.16194  -0.402               0.6875    
+## dist_z         0.31371    0.20605   1.523               0.1279    
+## zone1         -0.08300    0.26296  -0.316               0.7523    
+## zone2         -0.10462    0.18156  -0.576               0.5645    
+## zone3         -0.21304    0.25778  -0.826               0.4086    
+## zone4          0.40984    0.19600   2.091               0.0365 *  
+## zone6          0.04420    0.18513   0.239               0.8113    
+## zone7          0.65537    0.32403   2.023               0.0431 *  
+## zone8         -0.22071    0.26639  -0.829               0.4074    
+## zone9         -0.55349    0.34916  -1.585               0.1129    
+## zone11        -0.01205    0.39553  -0.030               0.9757    
+## zone12         0.35009    0.36126   0.969               0.3325    
+## zone13         0.31135    0.58621   0.531               0.5953    
+## zone14       -13.52693  160.39973  -0.084               0.9328    
+## I(dist_x^2)   -1.01289    0.13435  -7.539   0.0000000000000474 ***
+## I(dist_z^2)   -1.04478    0.16437  -6.356   0.0000000002066313 ***
+## pred_bbarrel  96.78644    6.15946  15.713 &lt; 0.0000000000000002 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## (Dispersion parameter for binomial family taken to be 1)
+## 
+##     Null deviance: 5878.8  on 30298  degrees of freedom
+## Residual deviance: 5082.6  on 30280  degrees of freedom
+##   (1 observation deleted due to missingness)
+## AIC: 5120.6
+## 
+## Number of Fisher Scoring iterations: 18</code></pre>
+<pre class="r"><code>fb_r_barrel_test &lt;- augment(fb_r_barrel, type.predict = &quot;response&quot;) %&gt;% 
+  rename(prediction = `.fitted`) %&gt;% 
   mutate(Response = &quot;barrel&quot;,
          Hand = &quot;right&quot;,
          pitch = &quot;fastball&quot;)
 
 
 rmse(fb_r_barrel_test$prediction, fb_r_barrel_test$Barrel)</code></pre>
-<pre><code>## [1] 0.1342152</code></pre>
+<pre><code>## [1] 0.1370269</code></pre>
 <pre class="r"><code># Strike ####
 
 # Refined Model
@@ -834,27 +883,19 @@ fb_r_strike &lt;- glm(STRIKE ~ pfx_z + zone + dist_x + dist_z +
 # Model Evaluation
 # summary(fb_r_strike)
 
-fb_r_strike_test &lt;- augment(fb_r_strike)
-  
-fb_r_strike_test &lt;- fb_r_strike_test %&gt;% 
-  mutate(prediction_log = predict(fb_r_strike, fb_r_strike_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction &gt;= 0.5 ~ 1,
-           prediction &lt; 0.5 ~ 0
-         )) %&gt;% 
-  filter(!is.na(prediction)) %&gt;% 
+fb_r_strike_test &lt;- augment(fb_r_strike, type.predict = &quot;response&quot;) %&gt;% 
+  rename(prediction = `.fitted`) %&gt;%
   mutate(Response = &quot;strike&quot;,
          Hand = &quot;right&quot;,
          pitch = &quot;fastball&quot;)
 
 
 rmse(fb_r_strike_test$prediction, fb_r_strike_test$STRIKE)</code></pre>
-<pre><code>## [1] 0.4235486</code></pre>
+<pre><code>## [1] 0.4345429</code></pre>
 </div>
 </div>
-<div id="four-seam-fastballs-rhp-to-rhh-1" class="section level3">
-<h3>Four Seam Fastballs RHP to RHH</h3>
+<div id="four-seam-fastballs-rhp-to-lhh" class="section level3">
+<h3>Four Seam Fastballs RHP to LHH</h3>
 <div id="whiff---removed-pfx_x-pfx_z" class="section level5">
 <h5>Whiff - Removed: pfx_x, pfx_z</h5>
 </div>
@@ -882,23 +923,15 @@ fb_l_whiff &lt;- glm(whiff ~ pitch_speed + pfx_total + zone + dist_x + dist_z +
 # Model Evaluation
 # summary(fb_l_whiff)
 
-fb_l_whiff_test &lt;- augment(fb_l_whiff)
-  
-fb_l_whiff_test &lt;- fb_l_whiff_test %&gt;% 
-  mutate(prediction_log = predict(fb_l_whiff, fb_l_whiff_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction &gt;= 0.5 ~ 1,
-           prediction &lt; 0.5 ~ 0
-         )) %&gt;% 
-  filter(!is.na(prediction)) %&gt;% 
+fb_l_whiff_test &lt;- augment(fb_l_whiff, type.predict = &quot;response&quot;) %&gt;% 
+  rename(prediction = `.fitted`) %&gt;% 
   mutate(Response = &quot;whiff&quot;,
          Hand = &quot;left&quot;,
          pitch = &quot;fastball&quot;)
 
 
 rmse(fb_l_whiff_test$prediction, fb_l_whiff_test$whiff)</code></pre>
-<pre><code>## [1] 0.269474</code></pre>
+<pre><code>## [1] 0.2772907</code></pre>
 <pre class="r"><code># Barrel ####
 
 # Refined Model
@@ -911,23 +944,15 @@ fb_l_barrel &lt;- glm(Barrel ~ pitch_speed + pfx_x + zone + dist_x +
 # Model Evaluation
 # summary(fb_l_barrel)
 
-fb_l_barrel_test &lt;- augment(fb_l_barrel)
-  
-fb_l_barrel_test &lt;- fb_l_barrel_test %&gt;% 
-  mutate(prediction_log = predict(fb_l_barrel, fb_l_barrel_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction &gt;= 0.5 ~ 1,
-           prediction &lt; 0.5 ~ 0
-         )) %&gt;% 
-  filter(!is.na(prediction)) %&gt;% 
+fb_l_barrel_test &lt;- augment(fb_l_barrel, type.predict = &quot;response&quot;) %&gt;% 
+  rename(prediction = `.fitted`) %&gt;% 
   mutate(Response = &quot;barrel&quot;,
          Hand = &quot;left&quot;,
          pitch = &quot;fastball&quot;)
 
 
 rmse(fb_l_barrel_test$prediction, fb_l_barrel_test$Barrel)</code></pre>
-<pre><code>## [1] 0.1189681</code></pre>
+<pre><code>## [1] 0.1227635</code></pre>
 <pre class="r"><code># Strike ####
 
 # Refined Model
@@ -940,27 +965,19 @@ fb_l_strike &lt;- glm(STRIKE ~ pitch_speed + pfx_total + zone + dist_x + dist_z 
 # Model Evaluation
 # summary(fb_l_strike)
 
-fb_l_strike_test &lt;- augment(fb_l_strike)
-  
-fb_l_strike_test &lt;- fb_l_strike_test %&gt;% 
-  mutate(prediction_log = predict(fb_l_strike, fb_l_strike_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction &gt;= 0.5 ~ 1,
-           prediction &lt; 0.5 ~ 0
-         )) %&gt;% 
-  filter(!is.na(prediction)) %&gt;% 
+fb_l_strike_test &lt;- augment(fb_l_strike, type.predict = &quot;response&quot;) %&gt;% 
+  rename(prediction = `.fitted`) %&gt;% 
   mutate(Response = &quot;strike&quot;,
          Hand = &quot;left&quot;,
          pitch = &quot;fastball&quot;)
 
 
 rmse(fb_l_strike_test$prediction, fb_l_strike_test$STRIKE)</code></pre>
-<pre><code>## [1] 0.4088246</code></pre>
+<pre><code>## [1] 0.421243</code></pre>
 </div>
 </div>
-<div id="sliders-fastballs-rhp-to-rhh" class="section level3">
-<h3>Sliders Fastballs RHP to RHH</h3>
+<div id="sliders-rhp-to-rhh" class="section level3">
+<h3>Sliders RHP to RHH</h3>
 <div id="whiff---removed-pitch_speed" class="section level5">
 <h5>Whiff - Removed: pitch_speed</h5>
 </div>
@@ -989,23 +1006,15 @@ sl_r_whiff &lt;- glm(whiff ~ pfx_x + pfx_z + pfx_total + zone + dist_x + dist_z 
 # Model Evaluation
 # summary(sl_r_whiff)
 
-sl_r_whiff_test &lt;- augment(sl_r_whiff)
-  
-sl_r_whiff_test &lt;- sl_r_whiff_test %&gt;% 
-  mutate(prediction_log = predict(sl_r_whiff, sl_r_whiff_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction &gt;= 0.5 ~ 1,
-           prediction &lt; 0.5 ~ 0
-         )) %&gt;% 
-  filter(!is.na(prediction)) %&gt;% 
+sl_r_whiff_test &lt;- augment(sl_r_whiff, type.predict = &quot;response&quot;) %&gt;% 
+  rename(prediction = `.fitted`) %&gt;% 
   mutate(Response = &quot;whiff&quot;,
          Hand = &quot;right&quot;,
          pitch = &quot;slider&quot;)
 
 
 rmse(sl_r_whiff_test$prediction, sl_r_whiff_test$whiff)</code></pre>
-<pre><code>## [1] 0.3469379</code></pre>
+<pre><code>## [1] 0.3641923</code></pre>
 <pre class="r"><code># Barrel ####
 
 # Refined Model
@@ -1018,23 +1027,15 @@ sl_r_barrel &lt;- glm(Barrel ~ dist_x + dist_z +
 # Model Evaluation
 # summary(sl_r_barrel)
 
-sl_r_barrel_test &lt;- augment(sl_r_barrel)
-  
-sl_r_barrel_test &lt;- sl_r_barrel_test %&gt;% 
-  mutate(prediction_log = predict(sl_r_barrel, sl_r_barrel_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction &gt;= 0.5 ~ 1,
-           prediction &lt; 0.5 ~ 0
-         )) %&gt;% 
-  filter(!is.na(prediction)) %&gt;% 
+sl_r_barrel_test &lt;- augment(sl_r_barrel, type.predict = &quot;response&quot;) %&gt;% 
+  rename(prediction = `.fitted`) %&gt;% 
   mutate(Response = &quot;barrel&quot;,
          Hand = &quot;right&quot;,
          pitch = &quot;slider&quot;)
 
 
 rmse(sl_r_barrel_test$prediction, sl_r_barrel_test$Barrel)</code></pre>
-<pre><code>## [1] 0.1058515</code></pre>
+<pre><code>## [1] 0.1159378</code></pre>
 <pre class="r"><code># Strike ####
 
 # Refined Model
@@ -1047,27 +1048,19 @@ sl_r_strike &lt;- glm(STRIKE ~ pitch_speed + pfx_x + pfx_z + pfx_total + zone + 
 # Model Evaluation
 # summary(sl_r_strike)
 
-sl_r_strike_test &lt;- augment(sl_r_strike)
-  
-sl_r_strike_test &lt;- sl_r_strike_test %&gt;% 
-  mutate(prediction_log = predict(sl_r_strike, sl_r_strike_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction &gt;= 0.5 ~ 1,
-           prediction &lt; 0.5 ~ 0
-         )) %&gt;% 
-  filter(!is.na(prediction)) %&gt;% 
+sl_r_strike_test &lt;- augment(sl_r_strike, type.predict = &quot;response&quot;) %&gt;% 
+  rename(prediction = `.fitted`) %&gt;% 
   mutate(Response = &quot;strike&quot;,
          Hand = &quot;right&quot;,
          pitch = &quot;slider&quot;)
 
 
 rmse(sl_r_strike_test$prediction, sl_r_strike_test$STRIKE)</code></pre>
-<pre><code>## [1] 0.4410115</code></pre>
+<pre><code>## [1] 0.4625979</code></pre>
 </div>
 </div>
-<div id="sliders-fastballs-rhp-to-lhh" class="section level3">
-<h3>Sliders Fastballs RHP to LHH</h3>
+<div id="sliders-rhp-to-lhh" class="section level3">
+<h3>Sliders RHP to LHH</h3>
 <div id="whiff---removed-pfx_z-pfx_x-pfx_total" class="section level5">
 <h5>Whiff - Removed: pfx_z, pfx_x, pfx_total</h5>
 </div>
@@ -1095,23 +1088,14 @@ sl_l_whiff &lt;- glm(whiff ~ pitch_speed + zone + dist_x + dist_z +
 # Model Evaluation
 # summary(sl_l_whiff)
 
-sl_l_whiff_test &lt;- augment(sl_l_whiff)
-  
-sl_l_whiff_test &lt;- sl_l_whiff_test %&gt;% 
-  mutate(prediction_log = predict(sl_l_whiff, sl_l_whiff_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction &gt;= 0.5 ~ 1,
-           prediction &lt; 0.5 ~ 0
-         )) %&gt;% 
-  filter(!is.na(prediction)) %&gt;% 
+sl_l_whiff_test &lt;- augment(sl_l_whiff, type.predict = &quot;response&quot;) %&gt;% 
+  rename(prediction = `.fitted`) %&gt;% 
   mutate(Response = &quot;whiff&quot;,
          Hand = &quot;left&quot;,
          pitch = &quot;slider&quot;)
 
-
 rmse(sl_l_whiff_test$prediction, sl_l_whiff_test$whiff)</code></pre>
-<pre><code>## [1] 0.3104902</code></pre>
+<pre><code>## [1] 0.3235445</code></pre>
 <pre class="r"><code># Barrel ####
 
 # Refined Model
@@ -1124,23 +1108,15 @@ sl_l_barrel &lt;- glm(Barrel ~ pitch_speed + pfx_x + pfx_z + zone + dist_x + dis
 # Model Evaluation
 # summary(sl_l_barrel)
 
-sl_l_barrel_test &lt;- augment(sl_l_barrel)
-  
-sl_l_barrel_test &lt;- sl_l_barrel_test %&gt;% 
-  mutate(prediction_log = predict(sl_l_barrel, sl_l_barrel_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction &gt;= 0.5 ~ 1,
-           prediction &lt; 0.5 ~ 0
-         )) %&gt;% 
-  filter(!is.na(prediction)) %&gt;% 
+sl_l_barrel_test &lt;- augment(sl_l_barrel, type.predict = &quot;response&quot;) %&gt;% 
+  rename(prediction = `.fitted`) %&gt;% 
   mutate(Response = &quot;barrel&quot;,
          Hand = &quot;left&quot;,
          pitch = &quot;slider&quot;)
 
 
 rmse(sl_l_barrel_test$prediction, sl_l_barrel_test$Barrel)</code></pre>
-<pre><code>## [1] 0.1210479</code></pre>
+<pre><code>## [1] 0.1284208</code></pre>
 <pre class="r"><code># Strike ####
 
 # Refined Model
@@ -1153,23 +1129,15 @@ sl_l_strike &lt;- glm(STRIKE ~ pfx_x + pfx_total + zone + dist_x + dist_z +
 # Model Evaluation
 # summary(sl_l_strike)
 
-sl_l_strike_test &lt;- augment(sl_l_strike)
-  
-sl_l_strike_test &lt;- sl_l_strike_test %&gt;% 
-  mutate(prediction_log = predict(sl_l_strike, sl_l_strike_test),
-         prediction = 1 / (1 + exp(-prediction_log)),
-         rounded_pred = case_when(
-           prediction &gt;= 0.5 ~ 1,
-           prediction &lt; 0.5 ~ 0
-         )) %&gt;% 
-  filter(!is.na(prediction)) %&gt;% 
+sl_l_strike_test &lt;- augment(sl_l_strike, type.predict = &quot;response&quot;) %&gt;% 
+  rename(prediction = `.fitted`) %&gt;% 
   mutate(Response = &quot;strike&quot;,
          Hand = &quot;left&quot;,
          pitch = &quot;slider&quot;)
 
 
 rmse(sl_l_strike_test$prediction, sl_l_strike_test$STRIKE)</code></pre>
-<pre><code>## [1] 0.4313273</code></pre>
+<pre><code>## [1] 0.4445678</code></pre>
 <pre class="r"><code>models &lt;- rbind(
   tidy(fb_r_whiff) %&gt;% mutate(Response = &quot;whiff&quot;,
   Hand = &quot;left&quot;, Pitch = &quot;fastball&quot;),

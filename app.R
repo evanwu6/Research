@@ -244,7 +244,8 @@ server <- function(input, output) {
   
   
   output$comps <- renderTable({
-    hand <- input$p_hand
+    p_hand <- input$p_hand
+    b_hand <- input$b_hand
     pitch <- input$pitch
     speed <- input$speed
     spin <- input$spin
@@ -252,7 +253,8 @@ server <- function(input, output) {
     move_z <- input$movement_z
     
     comps <- comp_data %>% 
-      filter(p_throws == hand) %>% 
+      filter(p_throws == p_hand,
+             hitter == b_hand) %>% 
       left_join(comp_mean, by = join_by(p_throws, pitch_type)) %>% 
       mutate(speed_sim = abs((Speed - speed) / comp_mean$std_speed)) %>% 
       mutate(spin_sim = abs((`Spin Rate` - spin) / comp_mean$std_spin)) %>%
