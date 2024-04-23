@@ -667,41 +667,6 @@ rmse(sl_l_strike_test$prediction, sl_l_strike_test$STRIKE)
 ```
 
 
-```{r Models, warning = FALSE, message = FALSE}
-models <- rbind(
-  tidy(fb_r_whiff) %>% mutate(Response = "whiff",
-  Hand = "left", Pitch = "fastball"),
-  tidy(fb_r_barrel) %>% mutate(Response = "barrel",
-  Hand = "left", Pitch = "fastball"),
-  tidy(fb_r_strike) %>% mutate(Response = "strike",
-  Hand = "left", Pitch = "fastball"),
-  
-  tidy(fb_l_whiff) %>% mutate(Response = "whiff",
-  Hand = "left", Pitch = "fastball"),
-  tidy(fb_l_barrel) %>% mutate(Response = "barrel",
-  Hand = "left", Pitch = "fastball"),
-  tidy(fb_l_strike) %>% mutate(Response = "strike",
-  Hand = "left", Pitch = "fastball"),
-  
-  tidy(sl_r_whiff) %>% mutate(Response = "whiff",
-  Hand = "right", Pitch = "slider"),
-  tidy(sl_r_barrel) %>% mutate(Response = "barrel",
-  Hand = "right", Pitch = "slider"),
-  tidy(sl_r_strike) %>% mutate(Response = "strike",
-  Hand = "right", Pitch = "slider"),
-  
-  tidy(sl_l_whiff) %>% mutate(Response = "whiff",
-  Hand = "left", Pitch = "slider"),
-  tidy(sl_l_barrel) %>% mutate(Response = "barrel",
-  Hand = "left", Pitch = "slider"),
-  tidy(sl_l_strike) %>% mutate(Response = "strike",
-  Hand = "left", Pitch = "slider"))
-
-
-# write.csv(models, "models2.csv")
-```
-
-
 
 ```{r Pred Averages, warning = FALSE, message = FALSE}
 batter_preds_r <- batter_stats %>% 
