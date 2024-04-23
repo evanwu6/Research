@@ -3,6 +3,7 @@ library(shiny)
 library(shinyjs)
 library(scales)
 library(knitr)
+library(broom)
 
 # Data ####
 movement <- read_csv("Movement.csv") %>% 
@@ -31,7 +32,7 @@ comp_mean <- comp_data %>%
             std_move_x = sd(`X Movement`),
             std_move_z = sd(`Z Movement`))
 
-model <- read_csv("models2.csv") %>% 
+model <- read_csv("models3.csv") %>% 
   select(-...1)
 
 pred_means <- read_csv("pred means.csv") %>% 
