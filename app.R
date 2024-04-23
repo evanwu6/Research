@@ -282,7 +282,11 @@ server <- function(input, output) {
   
   output$preds <- renderTable({
     
-    pitch <- ifelse(input$pitch == "FF", "fastball", "slider")
+    pitch <- case_when(input$pitch == "FF" ~ "fastball", 
+                       input$pitch == "SL" ~ "slider",
+                       input$pitch == "CU" ~ "curveball",
+                       input$pitch == "CH" ~ "changeup",
+                       TRUE ~ "fastball")
     pitch_speed <- input$speed
     pfx_x <- input$movement_x
     pfx_z <- input$movement_z
