@@ -39,6 +39,9 @@ pred_means <- read_csv("pred means.csv") %>%
   select(-...1)
 
 
+zone_data <- read_csv("zone_data.csv") %>% 
+  select(-...1)
+
 # Functions ####
 geom_zone <- function(top = 3.4, bottom = 1.6, linecolor = "black"){
   geom_rect(xmin = -.7083, xmax = .7083, ymin = bottom, ymax = top,
@@ -150,19 +153,6 @@ server <- function(input, output) {
     click_coords$y <- tail(c(click_coords$y, input$plot_click$y), 1)
   })
   
-  output$zone <- renderPlot({
-    ggplot(data.frame(x = 1, y = 1)) +
-      geom_plate() +
-      geom_zone() +
-      geom_rect(data = data.frame(xmin = click_coords$x - 0.075,
-                                  ymin = click_coords$y - 0.075,
-                                  xmax = click_coords$x + 0.075,
-                                  ymax = click_coords$y + 0.075),
-                aes(xmin = xmin, ymin = ymin, xmax = xmax, ymax = ymax),
-                fill = "blue", color = "black") +
-      xlim(-2, 2) + ylim(0, 4) + coord_fixed() +
-      theme_void()
-  })
   
   output$coord_x <- renderText({
     paste("x = ", ifelse(click_coords$x > -1000, sprintf("%.2f", round(click_coords$x, 2)), ""))
@@ -214,67 +204,387 @@ server <- function(input, output) {
                 step = 0.5)
   })
   
-  output$zone2 <- renderPlot({
-    ggplot(data.frame(x = 1, y = 1)) +
-      geom_plate() +
-      geom_zone() +
-      geom_rect(data = data.frame(xmin = click_coords$x - 0.075,
-                                  ymin = click_coords$y - 0.075,
-                                  xmax = click_coords$x + 0.075,
-                                  ymax = click_coords$y + 0.075),
+  output$zone <- renderPlot({
+    
+    # Whiff
+    
+    dist_x <- 0
+    dist_z <- 0
+    
+    pitch <- case_when(input$pitch == "FF" ~ "fastball", 
+                       input$pitch == "SL" ~ "slider",
+                       input$pitch == "CU" ~ "curveball",
+                       input$pitch == "CH" ~ "changeup",
+                       TRUE ~ "fastball")
+    
+    pitch_speed <- input$speed
+    pfx_x <- input$movement_x
+    pfx_z <- input$movement_z
+    pfx_total <- sqrt(pfx_x^2 + pfx_z^2)
+    # dist_x <- click_coords$x
+    # dist_z <- click_coords$y
+    dist_prop <- sqrt(dist_z^2 + dist_x^2)
+    release_spin_rate <- input$spin
+    
+    plate_x <- dist_x*0.708333
+    plate_z <- 2.5 + dist_z*0.9
+    
+    zone <- case_when(
+      plate_x <= (-17/72) & plate_x >= (-39/48) & plate_z >= (2.8) & plate_z <= 3.4 ~ 3,
+      plate_x >= (-17/72) & plate_x < (17/72) & plate_z >= (2.8) & plate_z <= 3.4 ~ 2,
+      plate_x >= (17/72) & plate_x <= (39/48) & plate_z >= (2.8) & plate_z <= 3.4 ~ 1,
+      
+      plate_x <= (-17/72) & plate_x >= (-39/48) & plate_z >= (2.2) & plate_z < (2.8) ~ 6,
+      plate_x >= (-17/72) & plate_x < (17/72) & plate_z >= (2.2) & plate_z < (2.8) ~ 5,
+      plate_x >= (17/72) & plate_x <= (39/48) & plate_z >= (2.2) & plate_z < (2.8) ~ 4,
+      
+      plate_x <= (-17/72) & plate_x >= (-39/48) & plate_z <= (2.2) & plate_z >= 1.6 ~ 9,
+      plate_x >= (-17/72) & plate_x < (17/72) & plate_z <= (2.2) & plate_z >= 1.6 ~ 8,
+      plate_x >= (17/72) & plate_x <= (39/48) & plate_z <= (2.2) & plate_z >= 1.6 ~ 7,
+      
+      plate_x >= 0 & plate_x <= (121/48) & plate_z >= 2.5 ~ 11,
+      plate_x <= 0 & plate_x >= (-121/48) & plate_z >= 2.5 ~ 12,
+      plate_x >= 0 & plate_x <= (121/48) & plate_z < 2.5 ~ 13,
+      plate_x <= 0 & plate_x >= (-121/48) & plate_z < 2.5 ~ 14)
+    
+    whiff <- model %>% 
+      filter(Response == "whiff",
+             Hand == "right",
+             Pitch == pitch)
+    
+    test <- whiff %>% 
+      select(term:estimate) %>% 
+      pivot_wider(names_from = "term",
+                  values_from = "estimate")
+    
+    
+    possible_cols <- c("(Intercept)", "pitch_speed", "pfx_x", "pfx_z", "pfx_total", 
+                       "zone1", "zone2", "zone3", "zone4", "zone6", "zone7", 
+                       "zone8", "zone9", "zone11", "zone12", "zone13", "zone14", 
+                       "dist_x", "dist_z", "dist_prop", "I(dist_x^2)", "I(dist_z^2)", 
+                       "release_spin_rate", "pred_bwhiff")
+    
+    for (col_name in possible_cols) {
+      if (col_name %in% colnames(test)) {
+      } else {
+        test[[col_name]] <- 0
+      }
+    }
+    
+    zone_value <- case_when(zone == 1 ~  test$zone1,
+                            zone == 2 ~  test$zone2,
+                            zone == 3 ~  test$zone3,
+                            zone == 4 ~  test$zone4,
+                            zone == 6 ~  test$zone6,
+                            zone == 7 ~  test$zone7,
+                            zone == 8 ~  test$zone8,
+                            zone == 9 ~  test$zone9,
+                            zone == 11 ~  test$zone11,
+                            zone == 12 ~  test$zone12,
+                            zone == 13 ~  test$zone13,
+                            zone == 14 ~  test$zone14,
+                            TRUE ~ 0)
+    
+    
+    prediction <- test$`(Intercept)` + test$pitch_speed*pitch_speed +
+      test$pfx_x*pfx_x + test$pfx_z*pfx_z + test$pfx_total*pfx_total + 
+      test$dist_x*dist_x + test$dist_z*dist_z + test$dist_prop*dist_prop +
+      test$release_spin_rate*release_spin_rate + zone_value
+    
+    prediction <- 1 / (1 + exp(-prediction))
+    prediction <- scales::percent(prediction, accuracy = 0.1)
+    
+    gen_pred <- test$`(Intercept)` + test$pitch_speed*pitch_speed +
+      test$pfx_x*pfx_x + test$pfx_z*pfx_z + test$pfx_total*pfx_total + 
+      test$release_spin_rate*release_spin_rate
+    
+    pitch_type <- pitch
+    
+    heat_map <- zone_data %>% 
+      filter(response == "whiff",
+             hand == "right",
+             pitch == pitch_type) %>% 
+      select(-response:-pitch) %>% 
+      mutate(pred = pred + gen_pred) %>% 
+      mutate(pred = 1 / (1 + exp(-pred)))
+  
+        
+    
+    ggplot(heat_map) +
+      geom_point(aes(x = x, y = z, 
+                     color = pred), shape = 15, size = 3.25, alpha = 1) +
+      scale_color_gradient2(low = "antiquewhite", high = "red") +
+      geom_rect(xmin = -1, xmax = 1, ymin = -1, ymax = 1,
+                alpha = 0, color = "black", linewidth = 1) +
+      geom_rect(data = data.frame(xmin = dist_x - 0.075,
+                                  ymin = dist_z - 0.075/1.27,
+                                  xmax = dist_x + 0.075,
+                                  ymax = dist_z + 0.075/1.27),
                 aes(xmin = xmin, ymin = ymin, xmax = xmax, ymax = ymax),
                 fill = "blue", color = "black") +
-      xlim(-2, 2) + ylim(0, 4) + coord_fixed() +
-      theme_void()
+      xlim(-2.5, 2.5) + ylim(-2.5, 2.5) + coord_fixed(ratio = 1.27) +
+      theme_void() +
+      labs(title = "Whiff Chance",
+           caption = paste("Location Whiff Chance:", prediction))
+    
+    
+    
   })
+  
+  
+  
+  output$zone2 <- renderPlot({
+    
+    # Barrel
+    
+    dist_x <- 0
+    dist_z <- 0
+    
+    pitch <- case_when(input$pitch == "FF" ~ "fastball", 
+                       input$pitch == "SL" ~ "slider",
+                       input$pitch == "CU" ~ "curveball",
+                       input$pitch == "CH" ~ "changeup",
+                       TRUE ~ "fastball")
+    
+    pitch_speed <- input$speed
+    pfx_x <- input$movement_x
+    pfx_z <- input$movement_z
+    pfx_total <- sqrt(pfx_x^2 + pfx_z^2)
+    # dist_x <- click_coords$x
+    # dist_z <- click_coords$y
+    dist_prop <- sqrt(dist_z^2 + dist_x^2)
+    release_spin_rate <- input$spin
+    
+    plate_x <- dist_x*0.708333
+    plate_z <- 2.5 + dist_z*0.9
+    
+    
+    zone <- case_when(
+      plate_x <= (-17/72) & plate_x >= (-39/48) & plate_z >= (2.8) & plate_z <= 3.4 ~ 3,
+      plate_x >= (-17/72) & plate_x < (17/72) & plate_z >= (2.8) & plate_z <= 3.4 ~ 2,
+      plate_x >= (17/72) & plate_x <= (39/48) & plate_z >= (2.8) & plate_z <= 3.4 ~ 1,
+      
+      plate_x <= (-17/72) & plate_x >= (-39/48) & plate_z >= (2.2) & plate_z < (2.8) ~ 6,
+      plate_x >= (-17/72) & plate_x < (17/72) & plate_z >= (2.2) & plate_z < (2.8) ~ 5,
+      plate_x >= (17/72) & plate_x <= (39/48) & plate_z >= (2.2) & plate_z < (2.8) ~ 4,
+      
+      plate_x <= (-17/72) & plate_x >= (-39/48) & plate_z <= (2.2) & plate_z >= 1.6 ~ 9,
+      plate_x >= (-17/72) & plate_x < (17/72) & plate_z <= (2.2) & plate_z >= 1.6 ~ 8,
+      plate_x >= (17/72) & plate_x <= (39/48) & plate_z <= (2.2) & plate_z >= 1.6 ~ 7,
+      
+      plate_x >= 0 & plate_x <= (121/48) & plate_z >= 2.5 ~ 11,
+      plate_x <= 0 & plate_x >= (-121/48) & plate_z >= 2.5 ~ 12,
+      plate_x >= 0 & plate_x <= (121/48) & plate_z < 2.5 ~ 13,
+      plate_x <= 0 & plate_x >= (-121/48) & plate_z < 2.5 ~ 14)
+    
+    barrel <- model %>% 
+      filter(Response == "barrel",
+             Hand == "right",
+             Pitch == pitch)
+    
+    test <- barrel %>% 
+      select(term:estimate) %>% 
+      pivot_wider(names_from = "term",
+                  values_from = "estimate")
+    
+    
+    possible_cols <- c("(Intercept)", "pitch_speed", "pfx_x", "pfx_z", "pfx_total", 
+                       "zone1", "zone2", "zone3", "zone4", "zone6", "zone7", 
+                       "zone8", "zone9", "zone11", "zone12", "zone13", "zone14", 
+                       "dist_x", "dist_z", "dist_prop", "I(dist_x^2)", "I(dist_z^2)", 
+                       "release_spin_rate", "pred_bbarrel")
+    
+    for (col_name in possible_cols) {
+      if (col_name %in% colnames(test)) {
+      } else {
+        test[[col_name]] <- 0
+      }
+    }
+    
+    zone_value <- case_when(zone == 1 ~  test$zone1,
+                            zone == 2 ~  test$zone2,
+                            zone == 3 ~  test$zone3,
+                            zone == 4 ~  test$zone4,
+                            zone == 6 ~  test$zone6,
+                            zone == 7 ~  test$zone7,
+                            zone == 8 ~  test$zone8,
+                            zone == 9 ~  test$zone9,
+                            zone == 11 ~  test$zone11,
+                            zone == 12 ~  test$zone12,
+                            zone == 13 ~  test$zone13,
+                            zone == 14 ~  test$zone14,
+                            TRUE ~ 0)
+    
+    
+    prediction <- test$`(Intercept)` + test$pitch_speed*pitch_speed +
+      test$pfx_x*pfx_x + test$pfx_z*pfx_z + test$pfx_total*pfx_total + 
+      test$dist_x*dist_x + test$dist_z*dist_z + test$dist_prop*dist_prop +
+      test$release_spin_rate*release_spin_rate + zone_value
+    
+    prediction <- 1 / (1 + exp(-prediction))
+    prediction <- scales::percent(prediction, accuracy = 0.1)
+    
+    gen_pred <- test$`(Intercept)` + test$pitch_speed*pitch_speed +
+      test$pfx_x*pfx_x + test$pfx_z*pfx_z + test$pfx_total*pfx_total + 
+      test$release_spin_rate*release_spin_rate
+    
+    pitch_type <- pitch
+    
+    heat_map <- zone_data %>% 
+      filter(response == "barrel",
+             hand == "right",
+             pitch == pitch_type) %>% 
+      select(-response:-pitch) %>% 
+      mutate(pred = pred + gen_pred) %>% 
+      mutate(pred = 1 / (1 + exp(-pred)))
+    
+    ggplot(heat_map) +
+      geom_point(aes(x = x, y = z, 
+                     color = pred), shape = 15, size = 3.25, alpha = 1) +
+      scale_color_gradient2(low = "antiquewhite", high = "red") +
+      geom_rect(xmin = -1, xmax = 1, ymin = -1, ymax = 1,
+                alpha = 0, color = "black", linewidth = 1) +
+      geom_rect(data = data.frame(xmin = dist_x - 0.075,
+                                  ymin = dist_z - 0.075/1.27,
+                                  xmax = dist_x + 0.075,
+                                  ymax = dist_z + 0.075/1.27),
+                aes(xmin = xmin, ymin = ymin, xmax = xmax, ymax = ymax),
+                fill = "blue", color = "black") +
+      xlim(-2.5, 2.5) + ylim(-2.5, 2.5) + coord_fixed(ratio = 1.27) +
+      theme_void() +
+      labs(title = "Barrel Chance",
+           caption = paste("Location Barrel Chance:", prediction))
+    
+    
+    
+  })
+  
   
   
   output$zone3 <- renderPlot({
-    ggplot(data.frame(x = 1, y = 1)) +
-      geom_plate() +
-      geom_zone() +
-      geom_rect(data = data.frame(xmin = click_coords$x - 0.075,
-                                  ymin = click_coords$y - 0.075,
-                                  xmax = click_coords$x + 0.075,
-                                  ymax = click_coords$y + 0.075),
+    
+    # Strike
+    
+    dist_x <- 0
+    dist_z <- 0
+    
+    pitch <- case_when(input$pitch == "FF" ~ "fastball", 
+                       input$pitch == "SL" ~ "slider",
+                       input$pitch == "CU" ~ "curveball",
+                       input$pitch == "CH" ~ "changeup",
+                       TRUE ~ "fastball")
+    
+    pitch_speed <- input$speed
+    pfx_x <- input$movement_x
+    pfx_z <- input$movement_z
+    pfx_total <- sqrt(pfx_x^2 + pfx_z^2)
+    # dist_x <- click_coords$x
+    # dist_z <- click_coords$y
+    dist_prop <- sqrt(dist_z^2 + dist_x^2)
+    release_spin_rate <- input$spin
+    
+    plate_x <- dist_x*0.708333
+    plate_z <- 2.5 + dist_z*0.9
+    
+    
+    zone <- case_when(
+      plate_x <= (-17/72) & plate_x >= (-39/48) & plate_z >= (2.8) & plate_z <= 3.4 ~ 3,
+      plate_x >= (-17/72) & plate_x < (17/72) & plate_z >= (2.8) & plate_z <= 3.4 ~ 2,
+      plate_x >= (17/72) & plate_x <= (39/48) & plate_z >= (2.8) & plate_z <= 3.4 ~ 1,
+      
+      plate_x <= (-17/72) & plate_x >= (-39/48) & plate_z >= (2.2) & plate_z < (2.8) ~ 6,
+      plate_x >= (-17/72) & plate_x < (17/72) & plate_z >= (2.2) & plate_z < (2.8) ~ 5,
+      plate_x >= (17/72) & plate_x <= (39/48) & plate_z >= (2.2) & plate_z < (2.8) ~ 4,
+      
+      plate_x <= (-17/72) & plate_x >= (-39/48) & plate_z <= (2.2) & plate_z >= 1.6 ~ 9,
+      plate_x >= (-17/72) & plate_x < (17/72) & plate_z <= (2.2) & plate_z >= 1.6 ~ 8,
+      plate_x >= (17/72) & plate_x <= (39/48) & plate_z <= (2.2) & plate_z >= 1.6 ~ 7,
+      
+      plate_x >= 0 & plate_x <= (121/48) & plate_z >= 2.5 ~ 11,
+      plate_x <= 0 & plate_x >= (-121/48) & plate_z >= 2.5 ~ 12,
+      plate_x >= 0 & plate_x <= (121/48) & plate_z < 2.5 ~ 13,
+      plate_x <= 0 & plate_x >= (-121/48) & plate_z < 2.5 ~ 14)
+    
+    strike <- model %>% 
+      filter(Response == "strike",
+             Hand == "right",
+             Pitch == pitch)
+    
+    test <- strike %>% 
+      select(term:estimate) %>% 
+      pivot_wider(names_from = "term",
+                  values_from = "estimate")
+    
+    
+    possible_cols <- c("(Intercept)", "pitch_speed", "pfx_x", "pfx_z", "pfx_total", 
+                       "zone1", "zone2", "zone3", "zone4", "zone6", "zone7", 
+                       "zone8", "zone9", "zone11", "zone12", "zone13", "zone14", 
+                       "dist_x", "dist_z", "dist_prop", "I(dist_x^2)", "I(dist_z^2)", 
+                       "release_spin_rate", "pred_bstrike")
+    
+    for (col_name in possible_cols) {
+      if (col_name %in% colnames(test)) {
+      } else {
+        test[[col_name]] <- 0
+      }
+    }
+    
+    zone_value <- case_when(zone == 1 ~  test$zone1,
+                            zone == 2 ~  test$zone2,
+                            zone == 3 ~  test$zone3,
+                            zone == 4 ~  test$zone4,
+                            zone == 6 ~  test$zone6,
+                            zone == 7 ~  test$zone7,
+                            zone == 8 ~  test$zone8,
+                            zone == 9 ~  test$zone9,
+                            zone == 11 ~  test$zone11,
+                            zone == 12 ~  test$zone12,
+                            zone == 13 ~  test$zone13,
+                            zone == 14 ~  test$zone14,
+                            TRUE ~ 0)
+    
+    
+    prediction <- test$`(Intercept)` + test$pitch_speed*pitch_speed +
+      test$pfx_x*pfx_x + test$pfx_z*pfx_z + test$pfx_total*pfx_total + 
+      test$dist_x*dist_x + test$dist_z*dist_z + test$dist_prop*dist_prop +
+      test$release_spin_rate*release_spin_rate + zone_value
+    
+    prediction <- 1 / (1 + exp(-prediction))
+    prediction <- scales::percent(prediction, accuracy = 0.1)
+    
+    
+    gen_pred <- test$`(Intercept)` + test$pitch_speed*pitch_speed +
+      test$pfx_x*pfx_x + test$pfx_z*pfx_z + test$pfx_total*pfx_total + 
+      test$release_spin_rate*release_spin_rate
+    
+    pitch_type <- pitch
+    
+    heat_map <- zone_data %>% 
+      filter(response == "strike",
+             hand == "right",
+             pitch == pitch_type) %>% 
+      select(-response:-pitch) %>% 
+      mutate(pred = pred + gen_pred) %>% 
+      mutate(pred = 1 / (1 + exp(-pred)))
+    
+    ggplot(heat_map) +
+      geom_point(aes(x = x, y = z, 
+                     color = pred), shape = 15, size = 3.25, alpha = 1) +
+      scale_color_gradient2(low = "antiquewhite", high = "red") +
+      geom_rect(xmin = -1, xmax = 1, ymin = -1, ymax = 1,
+                alpha = 0, color = "black", linewidth = 1) +
+      geom_rect(data = data.frame(xmin = dist_x - 0.075,
+                                  ymin = dist_z - 0.075/1.27,
+                                  xmax = dist_x + 0.075,
+                                  ymax = dist_z + 0.075/1.27),
                 aes(xmin = xmin, ymin = ymin, xmax = xmax, ymax = ymax),
                 fill = "blue", color = "black") +
-      xlim(-2, 2) + ylim(0, 4) + coord_fixed() +
-      theme_void()
-  })
-  
-  
-  output$comps <- renderTable({
-    p_hand <- input$p_hand
-    b_hand <- input$b_hand
-    pitch <- input$pitch
-    speed <- input$speed
-    spin <- input$spin
-    move_x <- input$movement_x
-    move_z <- input$movement_z
+      xlim(-2.5, 2.5) + ylim(-2.5, 2.5) + coord_fixed(ratio = 1.27) +
+      theme_void() +
+      labs(title = "Strike Chance",
+           caption = paste("Location Strike Chance:", prediction))
     
-    comps <- comp_data %>% 
-      filter(p_throws == p_hand,
-             hitter == b_hand) %>% 
-      left_join(comp_mean, by = join_by(p_throws, pitch_type)) %>% 
-      mutate(speed_sim = abs((Speed - speed) / comp_mean$std_speed)) %>% 
-      mutate(spin_sim = abs((`Spin Rate` - spin) / comp_mean$std_spin)) %>%
-      mutate(bx_sim = abs((`X Movement` - move_x) / comp_mean$std_move_x)) %>% 
-      mutate(bz_sim = abs((`Z Movement` - move_z) / comp_mean$std_move_z)) %>% 
-      mutate(similarity = round(rowSums(cbind(speed_sim, spin_sim, bx_sim, bz_sim))/4, 2))
     
-    comps %>% 
-      arrange(similarity) %>% 
-      select(pitch_type, Name, Speed, `Spin Rate`, 
-             `X Movement`, `Z Movement`, 
-             `Whiff Prop`, `Barrel Prop`, `Strike Prop`, similarity) %>% 
-      rename(Pitch = pitch_type) %>% 
-      mutate(Speed = format(Speed, nsmall = 1),
-             `Spin Rate` = format(`Spin Rate`, big.mark = ",", nsmall = 0),
-             `X Movement` = format(`X Movement`, nsmall = 1),
-             `Z Movement` = format(`Z Movement`, nsmall = 1),
-             similarity = format(similarity, nsmall = 1)) %>% 
-      head(10)
     
   })
   
@@ -282,23 +592,26 @@ server <- function(input, output) {
   
   output$preds <- renderTable({
     
+    dist_x <- 0
+    dist_z <- 0
+    
     pitch <- case_when(input$pitch == "FF" ~ "fastball", 
                        input$pitch == "SL" ~ "slider",
                        input$pitch == "CU" ~ "curveball",
                        input$pitch == "CH" ~ "changeup",
                        TRUE ~ "fastball")
+    
     pitch_speed <- input$speed
     pfx_x <- input$movement_x
     pfx_z <- input$movement_z
     pfx_total <- sqrt(pfx_x^2 + pfx_z^2)
-    plate_x <- click_coords$x
-    plate_z <- click_coords$y
-    dist_x <- plate_x/0.708333
-    dist_z <- ifelse(plate_z >= 2.5, 
-                     (plate_z - 2.5) / (3.4 - 2.5), 
-                     (plate_z - 2.5) / (2.5 - 1.6))
+    # dist_x <- click_coords$x
+    # dist_z <- click_coords$y
     dist_prop <- sqrt(dist_z^2 + dist_x^2)
     release_spin_rate <- input$spin
+    
+    plate_x <- dist_x*0.708333
+    plate_z <- 2.5 + dist_z*0.9
     
     zone <- case_when(
         plate_x <= (-17/72) & plate_x >= (-39/48) & plate_z >= (2.8) & plate_z <= 3.4 ~ 3,
