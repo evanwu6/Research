@@ -225,6 +225,7 @@ server <- function(input, output) {
     # dist_z <- click_coords$y
     dist_prop <- sqrt(dist_z^2 + dist_x^2)
     release_spin_rate <- input$spin
+    b_hand <- input$b_hand
     
     plate_x <- dist_x*0.708333
     plate_z <- 2.5 + dist_z*0.9
@@ -248,8 +249,9 @@ server <- function(input, output) {
       plate_x <= 0 & plate_x >= (-121/48) & plate_z < 2.5 ~ 14)
     
     whiff <- model %>% 
+      mutate(Hand = ifelse(Hand == "right", "R", "L")) %>% 
       filter(Response == "whiff",
-             Hand == "right",
+             Hand == b_hand,
              Pitch == pitch)
     
     test <- whiff %>% 
@@ -285,24 +287,29 @@ server <- function(input, output) {
                             zone == 14 ~  test$zone14,
                             TRUE ~ 0)
     
+    pred_bwhiff <- pred_means %>% 
+      filter(hitter == b_hand,
+             pitch_type == input$pitch) %>% 
+      select(whiff_mean)
     
     prediction <- test$`(Intercept)` + test$pitch_speed*pitch_speed +
       test$pfx_x*pfx_x + test$pfx_z*pfx_z + test$pfx_total*pfx_total + 
       test$dist_x*dist_x + test$dist_z*dist_z + test$dist_prop*dist_prop +
-      test$release_spin_rate*release_spin_rate + zone_value
+      test$release_spin_rate*release_spin_rate + zone_value + test$pred_bwhiff*pred_bwhiff$whiff_mean
     
     prediction <- 1 / (1 + exp(-prediction))
     prediction <- scales::percent(prediction, accuracy = 0.1)
     
     gen_pred <- test$`(Intercept)` + test$pitch_speed*pitch_speed +
       test$pfx_x*pfx_x + test$pfx_z*pfx_z + test$pfx_total*pfx_total + 
-      test$release_spin_rate*release_spin_rate
+      test$release_spin_rate*release_spin_rate + test$pred_bwhiff*pred_bwhiff$whiff_mean
     
     pitch_type <- pitch
     
     heat_map <- zone_data %>% 
+      mutate(hand = ifelse(hand == "right", "R", "L")) %>% 
       filter(response == "whiff",
-             hand == "right",
+             hand == b_hand,
              pitch == pitch_type) %>% 
       select(-response:-pitch) %>% 
       mutate(pred = pred + gen_pred) %>% 
@@ -354,6 +361,7 @@ server <- function(input, output) {
     # dist_z <- click_coords$y
     dist_prop <- sqrt(dist_z^2 + dist_x^2)
     release_spin_rate <- input$spin
+    b_hand <- input$b_hand
     
     plate_x <- dist_x*0.708333
     plate_z <- 2.5 + dist_z*0.9
@@ -378,8 +386,9 @@ server <- function(input, output) {
       plate_x <= 0 & plate_x >= (-121/48) & plate_z < 2.5 ~ 14)
     
     barrel <- model %>% 
+      mutate(Hand = ifelse(Hand == "right", "R", "L")) %>% 
       filter(Response == "barrel",
-             Hand == "right",
+             Hand == b_hand,
              Pitch == pitch)
     
     test <- barrel %>% 
@@ -415,24 +424,29 @@ server <- function(input, output) {
                             zone == 14 ~  test$zone14,
                             TRUE ~ 0)
     
+    pred_bbarrel <- pred_means %>% 
+      filter(hitter == b_hand,
+             pitch_type == input$pitch) %>% 
+      select(barrel_mean)
     
     prediction <- test$`(Intercept)` + test$pitch_speed*pitch_speed +
       test$pfx_x*pfx_x + test$pfx_z*pfx_z + test$pfx_total*pfx_total + 
       test$dist_x*dist_x + test$dist_z*dist_z + test$dist_prop*dist_prop +
-      test$release_spin_rate*release_spin_rate + zone_value
+      test$release_spin_rate*release_spin_rate + zone_value + test$pred_bbarrel*pred_bbarrel$barrel_mean
     
     prediction <- 1 / (1 + exp(-prediction))
     prediction <- scales::percent(prediction, accuracy = 0.1)
     
     gen_pred <- test$`(Intercept)` + test$pitch_speed*pitch_speed +
       test$pfx_x*pfx_x + test$pfx_z*pfx_z + test$pfx_total*pfx_total + 
-      test$release_spin_rate*release_spin_rate
+      test$release_spin_rate*release_spin_rate + test$pred_bbarrel*pred_bbarrel$barrel_mean
     
     pitch_type <- pitch
     
     heat_map <- zone_data %>% 
+      mutate(hand = ifelse(hand == "right", "R", "L")) %>% 
       filter(response == "barrel",
-             hand == "right",
+             hand == b_hand,
              pitch == pitch_type) %>% 
       select(-response:-pitch) %>% 
       mutate(pred = pred + gen_pred) %>% 
@@ -482,6 +496,7 @@ server <- function(input, output) {
     # dist_z <- click_coords$y
     dist_prop <- sqrt(dist_z^2 + dist_x^2)
     release_spin_rate <- input$spin
+    b_hand <- input$b_hand
     
     plate_x <- dist_x*0.708333
     plate_z <- 2.5 + dist_z*0.9
@@ -506,8 +521,9 @@ server <- function(input, output) {
       plate_x <= 0 & plate_x >= (-121/48) & plate_z < 2.5 ~ 14)
     
     strike <- model %>% 
+      mutate(Hand = ifelse(Hand == "right", "R", "L")) %>% 
       filter(Response == "strike",
-             Hand == "right",
+             Hand == b_hand,
              Pitch == pitch)
     
     test <- strike %>% 
@@ -543,25 +559,29 @@ server <- function(input, output) {
                             zone == 14 ~  test$zone14,
                             TRUE ~ 0)
     
+    pred_bstrike <- pred_means %>% 
+      filter(hitter == b_hand,
+             pitch_type == input$pitch) %>% 
+      select(strike_mean)
     
     prediction <- test$`(Intercept)` + test$pitch_speed*pitch_speed +
       test$pfx_x*pfx_x + test$pfx_z*pfx_z + test$pfx_total*pfx_total + 
       test$dist_x*dist_x + test$dist_z*dist_z + test$dist_prop*dist_prop +
-      test$release_spin_rate*release_spin_rate + zone_value
+      test$release_spin_rate*release_spin_rate + zone_value + test$pred_bstrike*pred_bstrike$strike_mean
     
     prediction <- 1 / (1 + exp(-prediction))
     prediction <- scales::percent(prediction, accuracy = 0.1)
     
-    
     gen_pred <- test$`(Intercept)` + test$pitch_speed*pitch_speed +
       test$pfx_x*pfx_x + test$pfx_z*pfx_z + test$pfx_total*pfx_total + 
-      test$release_spin_rate*release_spin_rate
+      test$release_spin_rate*release_spin_rate + test$pred_bstrike*pred_bstrike$strike_mean
     
     pitch_type <- pitch
     
     heat_map <- zone_data %>% 
+      mutate(hand = ifelse(hand == "right", "R", "L")) %>% 
       filter(response == "strike",
-             hand == "right",
+             hand == b_hand,
              pitch == pitch_type) %>% 
       select(-response:-pitch) %>% 
       mutate(pred = pred + gen_pred) %>% 
