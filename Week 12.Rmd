@@ -1,5 +1,5 @@
 ---
-title: "Week 10"
+title: "Week 12"
 author: "Evan Wu"
 output: 
   html_document:
@@ -72,7 +72,7 @@ swap_names <- function(name) {
 
 ```
 
-```{r}
+```{r, warning = FALSE, message = FALSE}
 # Data
 model <- read_csv("models3.csv") %>% 
   select(-...1) %>% 

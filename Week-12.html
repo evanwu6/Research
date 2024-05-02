@@ -12,7 +12,7 @@
 <meta name="author" content="Evan Wu" />
 
 
-<title>Week 10</title>
+<title>Week 12</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -437,7 +437,7 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">Week 10</h1>
+<h1 class="title toc-ignore">Week 12</h1>
 <h4 class="author">Evan Wu</h4>
 
 </div>
@@ -502,17 +502,9 @@ swap_names &lt;- function(name) {
 <pre class="r"><code># Data
 model &lt;- read_csv(&quot;models3.csv&quot;) %&gt;% 
   select(-...1) %&gt;% 
-  filter(!(term  %in%  c(&quot;(Intercept)&quot;, &quot;pred_bwhiff&quot;, &quot;pred_bbarrel&quot;, &quot;pred_bstrike&quot;)))</code></pre>
-<pre><code>## New names:
-## Rows: 458 Columns: 9
-## ── Column specification
-## ──────────────────────────────────────────────────────── Delimiter: &quot;,&quot; chr
-## (4): term, Response, Hand, Pitch dbl (5): ...1, estimate, std.error, statistic,
-## p.value
-## ℹ Use `spec()` to retrieve the full column specification for this data. ℹ
-## Specify the column types or set `show_col_types = FALSE` to quiet this message.
-## • `` -&gt; `...1`</code></pre>
-<pre class="r"><code># Keeping and renaming zone with lowest p-value
+  filter(!(term  %in%  c(&quot;(Intercept)&quot;, &quot;pred_bwhiff&quot;, &quot;pred_bbarrel&quot;, &quot;pred_bstrike&quot;)))
+
+# Keeping and renaming zone with lowest p-value
 model &lt;- model %&gt;% 
   filter(!(term %in% c(&quot;zone1&quot;, &quot;zone2&quot;, &quot;zone3&quot;, &quot;zone4&quot;, &quot;zone6&quot;, &quot;zone7&quot;, &quot;zone8&quot;,
                        &quot;zone9&quot;, &quot;zone11&quot;, &quot;zone12&quot;, &quot;zone13&quot;, &quot;zone14&quot;) &amp; 
