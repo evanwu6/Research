@@ -1,7 +1,19 @@
 library(tidyverse)
 options(scipen = 999)
 
-models <- read_csv("models3.csv")
+models <- read_csv("models4.csv") %>% 
+  mutate(Pitch = str_replace(Pitch, "FF", "fastball"),
+         Pitch = str_replace(Pitch, "SL", "slider"),
+         Pitch = str_replace(Pitch, "CU", "curveball"),
+         Pitch = str_replace(Pitch, "CH", "changeup")) %>% 
+  mutate(Hand = ifelse(BHand == "R", "right", "left")) %>% 
+  mutate(Response = case_when(Response == "STRIKE" ~ "strike",
+                              Response == "Barrel" ~ "barrel",
+                              Response == "whiff" ~ "whiff")) %>% 
+  mutate(term = case_when(term == "pred" & Response == "whiff" ~ "pred_bwhiff",
+                          term == "pred" & Response == "barrel" ~ "pred_bbarrel",
+                          term == "pred" & Response == "strike" ~ "pred_bstrike",
+                          TRUE ~ term))
 
 zones <- models %>%
   select(zone1:zone9) %>%
@@ -59,11 +71,12 @@ for(response in c("whiff", "strike", "barrel")) {
       test_z2 <- pull(filter(test_data, term == "I(dist_z^2)"), estimate)
       test_prop <- pull(filter(test_data, term == "dist_prop"), estimate)
       
-      if(is.na(test_x)) {test_x <- 0}
-      if(is.na(test_z)) {test_z <- 0}
-      if(is.na(test_x2)) {test_x2 <- 0}
-      if(is.na(test_z2)) {test_z2 <- 0}
-      if(!is.null(is.na(test_prop))) {test_prop <- 0}
+      if(is_empty(test_x)) {test_x <- 0}
+      if(is_empty(test_z)) {test_z <- 0}
+      if(is_empty(test_x2)) {test_x2 <- 0}
+      if(is_empty(test_z2)) {test_z2 <- 0}
+      if(is_empty(test_prop)) {test_prop <- 0}
+      # if(!is.null(is.na(test_prop))) {test_prop <- 0}
       
       zone_data[zone_data$response == response & zone_data$hand == hand & zone_data$pitch == pitch,] <- zone_data[zone_data$response == response & zone_data$hand == hand & zone_data$pitch == pitch,] %>%
         mutate(pred = x * test_x + z * test_z +
@@ -85,7 +98,7 @@ zone_data %>%
   facet_grid(pitch ~ hand)
 
 
-
+# write.csv(zone_data, "zone_data.csv")
 
 
 pitch_speed <- 92

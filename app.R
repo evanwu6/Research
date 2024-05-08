@@ -32,8 +32,23 @@ comp_mean <- comp_data %>%
             std_move_x = sd(`X Movement`),
             std_move_z = sd(`Z Movement`))
 
-model <- read_csv("models3.csv") %>% 
+model2 <- read_csv("models3.csv") %>%
   select(-...1)
+
+model <- read_csv("models4.csv") %>% 
+  mutate(Pitch = str_replace(Pitch, "FF", "fastball"),
+         Pitch = str_replace(Pitch, "SL", "slider"),
+         Pitch = str_replace(Pitch, "CU", "curveball"),
+         Pitch = str_replace(Pitch, "CH", "changeup")) %>% 
+  mutate(Hand = ifelse(BHand == "R", "right", "left")) %>% 
+  mutate(Response = case_when(Response == "STRIKE" ~ "strike",
+                              Response == "Barrel" ~ "barrel",
+                              Response == "whiff" ~ "whiff")) %>% 
+  mutate(term = case_when(term == "pred" & Response == "whiff" ~ "pred_bwhiff",
+                          term == "pred" & Response == "barrel" ~ "pred_bbarrel",
+                          term == "pred" & Response == "strike" ~ "pred_bstrike",
+                          TRUE ~ term))
+  
 
 pred_means <- read_csv("pred means.csv") %>% 
   select(-...1)
