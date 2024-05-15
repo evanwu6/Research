@@ -10,7 +10,7 @@ movement <- read_csv("Movement.csv") %>%
   mutate(min_x = min_x*12,
          max_x = max_x*12,
          min_z = min_z*12,
-         max_z = max_z*12) %>% 
+         max_z = max_z*12) %>%
   filter(min_spin != "Inf", 
          !is.na(pitch_speed))
 

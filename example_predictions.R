@@ -1,4 +1,5 @@
 library(tidyverse)
+library(tidyr)
 options(scipen = 999)
 
 models <- read_csv("models4.csv") %>% 

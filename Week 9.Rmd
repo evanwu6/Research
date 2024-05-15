@@ -698,7 +698,7 @@ models <- rbind(
 # write.csv(models, "models2.csv")
 ```
 
-
+# Pred Averages ####
 
 ```{r Pred Averages, warning = FALSE, message = FALSE}
 batter_preds_r <- batter_stats %>% 

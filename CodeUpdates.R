@@ -93,7 +93,11 @@ for(pitch in c("FF", "SL", "CH", "CU")) {
       
       data <- rhp %>%
         filter(pitch_type == pitch,
-               hitter == bhand)
+               hitter == bhand) %>% 
+        mutate(pfx_x = pfx_x*12,
+               pfx_z = pfx_z*12,
+               pfx_total = sqrt(pfx_x^2 + pfx_z^2)) %>% 
+        mutate(plate_x = -plate_x)
       
       if(response == "whiff") { data <- rename(data, response = whiff,
                                        pred = pred_bwhiff) }
