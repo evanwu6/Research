@@ -32,9 +32,6 @@ comp_mean <- comp_data %>%
             std_move_x = sd(`X Movement`),
             std_move_z = sd(`Z Movement`))
 
-model2 <- read_csv("models3.csv") %>%
-  select(-...1)
-
 model <- read_csv("models4.csv") %>% 
   mutate(Pitch = str_replace(Pitch, "FF", "fastball"),
          Pitch = str_replace(Pitch, "SL", "slider"),
@@ -379,7 +376,8 @@ server <- function(input, output) {
     ggplot(heat_map) +
       geom_point(aes(x = x, y = z, 
                      color = pred), shape = 15, size = 3.25, alpha = 1) +
-      scale_color_gradient2(low = "antiquewhite", high = "red") +
+      scale_color_gradient2(low = "antiquewhite", high = "red",
+                            labels = scales::percent) +
       geom_rect(xmin = -1, xmax = 1, ymin = -1, ymax = 1,
                 alpha = 0, color = "black", linewidth = 1) +
       geom_rect(data = data.frame(xmin = click_coords$x - 0.075,
@@ -528,7 +526,8 @@ server <- function(input, output) {
     ggplot(heat_map) +
       geom_point(aes(x = x, y = z, 
                      color = pred), shape = 15, size = 3.25, alpha = 1) +
-      scale_color_gradient2(low = "antiquewhite", high = "red") +
+      scale_color_gradient2(low = "antiquewhite", high = "red",
+                            labels = scales::percent) +
       geom_rect(xmin = -1, xmax = 1, ymin = -1, ymax = 1,
                 alpha = 0, color = "black", linewidth = 1) +
       geom_rect(data = data.frame(xmin = click_coords$x - 0.075,
@@ -677,7 +676,8 @@ server <- function(input, output) {
     ggplot(heat_map) +
       geom_point(aes(x = x, y = z, 
                      color = pred), shape = 15, size = 3.25, alpha = 1) +
-      scale_color_gradient2(low = "antiquewhite", high = "red") +
+      scale_color_gradient2(low = "antiquewhite", high = "red",
+                            labels = scales::percent) +
       geom_rect(xmin = -1, xmax = 1, ymin = -1, ymax = 1,
                 alpha = 0, color = "black", linewidth = 1) +
       geom_rect(data = data.frame(xmin = click_coords$x - 0.075,

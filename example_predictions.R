@@ -99,15 +99,6 @@ zone_data %>%
   facet_grid(pitch ~ hand)
 
 
-# write.csv(zone_data, "zone_data.csv")
+write.csv(zone_data, "zone_data.csv")
 
-
-pitch_speed <- 92
-spin_rate <- 2100
-pfx_x < 18
-pfx_z <- 3
-
-zone_data <- zone_data %>%
-  filter() %>%
-  mutate(pred = pred + pitch_speed * __ + spin_rate * __)
 
