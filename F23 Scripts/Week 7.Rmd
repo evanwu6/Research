@@ -201,7 +201,7 @@ lm1_l %>%
 ```
 
 ```{r LHP Linear Model Interactions, echo = FALSE, warning = FALSE}
-# Model Data (Pitch = Slider, Pitching Hand = Right)
+# Model Data (Pitch = Slider, Pitching Hand = Left)
 
 # Interaction Linear Regression
 lm_interact_l <- lm(xwOBA ~ 

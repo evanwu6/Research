@@ -1,0 +1,1086 @@
+---
+title: "Exploratory Data Analysis"
+output: 
+  html_document:
+    code_folding:
+      hide
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+```{r Libraries}
+library(tidyverse)
+library(readxl)
+library(ggforce)
+library(concaveman)
+library(knitr)
+library(olsrr)
+library(ranger)
+library(Metrics)
+
+set.seed(3630)
+
+```
+
+<br>
+
+```{r Functions}
+
+# Strike Zone GG Object
+geom_zone <- function(top = 11/3, bottom = 3/2, linecolor = "black"){
+  geom_rect(xmin = -.7083, xmax = .7083, ymin = bottom, ymax = top,
+            alpha = 0, color = linecolor, linewidth = 0.75)
+}
+
+# c(0, 0, -.25, -.5, -.25))
+
+# Home Plate GG Object
+geom_plate <- function(pov = "pitcher"){
+   df <- case_when(
+     pov == "pitcher" ~ 
+       data.frame(x = c(-.7083, .7083, .7083 ,0, -.7083), y = c(0, 0, .25, .5, .25)),
+     pov == "catcher" ~ 
+       data.frame(x = c(-.7083, .7083, .7083 ,0, -.7083), y = c(0, 0, -.25, -.5, -.25))
+   )
+  
+   g <- geom_polygon(data = df, aes(x = x, y = y), fill = "white", color = "black", linewidth = 1.25)
+  g
+}
+
+# Barrel Function
+is.barrel <- function(LA, EV){
+  upper <- 1.11*EV - 78.89
+  lower <- -EV + 124
+  outcome <- (LA >= lower) & (LA <= upper) & (EV >= 98) & (LA >= 8) & (LA <= 50)
+  outcome <- replace_na(outcome, FALSE)
+  outcome
+}
+
+# Normal Name Changer
+swap_names <- function(name) {
+  parts <- strsplit(name, ", ")[[1]]
+  if (length(parts) == 2) {
+    return(paste(rev(parts), collapse = " "))
+  } else {
+    return(name)
+  }
+}
+```
+
+
+<br>
+<br>
+
+### **Data Manipulation / Investigation**
+
+<br>
+
+
+```{r Data 1}
+# Arsenal and Movement Information
+arsenal_spin <- read_csv("Pitch Type Data/2022_arsenal_spin.csv")
+
+movement <- read_csv("~/Downloads/Baseball Analytics/Diamond Dollars 2023/Statcast Data 2022/Group B/Libka 9-12-22/TEX at MIA 9-12-22.csv")
+
+movement %>% 
+  select(pitch_type, release_speed, p_throws, pfx_x, pfx_z)
+
+# Single Pitcher Data
+strider <- read_csv("Pitch Level Data/Strider_9_13_23.csv") %>% 
+  select(-game_date, -`pitcher...8`, -spin_dir:-break_length_deprecated,
+         -game_type, -home_team, -away_team)
+
+median(arsenal_spin$ff_avg_spin, na.rm = TRUE)
+median(arsenal_spin$sl_avg_spin, na.rm = TRUE)
+median(arsenal_spin$cu_avg_spin, na.rm = TRUE)
+
+# 9 RHP Pitchers
+pitchers <- read_csv("CSVs/pitcher_comps.csv")
+
+# Pitcher Arsenals
+arsenal <- read_csv("CSVs/arsenal.csv")
+
+# Season Stats
+seasonal <- read_csv("CSVs/season_stats.csv")
+
+# Whiff Data RHP
+whiff <- pitchers %>% 
+  mutate(whiff = description == "swinging_strike",
+         whiff = as.character(whiff)) %>% 
+  filter(pitch_type != "NA",
+         pitch_type != "PO")
+
+# LHP Data (35 Pitchers)
+LHP <- read_csv("CSVs/lhp_pitches.csv") %>% 
+  select(-...1) %>% 
+  filter(!is.na(pitch_type)) %>% 
+  mutate(pitch_type = str_replace(pitch_type, "CS", "CU"),
+         pitch_name = str_replace(pitch_name, "Slow Curve", "Curveball"),
+         pitch_type = str_replace(pitch_type, "KC", "CU"),
+         pitch_name = str_replace(pitch_name, "Knuckle Curve", "Curveball"))
+
+
+whiff_l <- LHP %>% 
+  mutate(whiff = description == "swinging_strike",
+         whiff = as.character(whiff)) %>% 
+  filter(pitch_type != "NA",
+         pitch_type != "PO")
+
+# Full Dataset
+all <- read_csv("CSVs/all_pitches.csv") %>% 
+  select(-...1) %>% 
+  mutate(wOBAr = case_when(
+    woba >= 0.370 ~ 6,
+    woba >= 0.340 ~ 5,
+    woba >= 0.310 ~ 4,
+    woba >= 0.280 ~ 3,
+    woba >= 0.250 ~ 2,
+    woba >= 0.220 ~ 1)) %>% 
+  mutate(wOBAr = as.factor(wOBAr))
+
+```
+<br>
+<br>
+
+### **Single Game Visualizations**
+
+<br>
+
+
+```{r EDA 1}
+
+
+# Color / Shape = Pitch
+strider %>% 
+  ggplot(aes(x = plate_x, y = plate_z)) +
+  geom_segment(x = -8.5/12, y = 18/12, xend = 8.5/12, yend = 18/12,
+               linewidth = 0.5) +
+  geom_segment(x = -8.5/12, y = 44/12, xend = 8.5/12, yend = 44/12,
+               linewidth = 0.5) +
+  geom_segment(x = -8.5/12, y = 18/12, xend = -8.5/12, yend = 44/12,
+               linewidth = 0.5) +
+  geom_segment(x = 8.5/12, y = 18/12, xend = 8.5/12, yend = 44/12,
+               linewidth = 0.5) +
+  geom_plate() +
+  geom_point(aes(shape = pitch_type, color = pitch_type), alpha = 0.85) + 
+  coord_fixed() +
+  labs(color = "Pitch",
+       shape = "Pitch",
+       title = "Spencer Strider",
+       subtitle = "Sep. 13, 2023 vs. PHI",
+       caption = "Data from Baseball Savant") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank())
+
+# Color = Speed / Shape = Pitch
+strider %>% 
+  mutate(type = str_replace(type, "B", "Ball"),
+         type = str_replace(type, "S", "Strike"),
+         type = str_replace(type, "X", "In Play")) %>% 
+  ggplot(aes(x = -plate_x, y = plate_z)) +
+  geom_segment(x = -8.5/12, y = 18/12, xend = 8.5/12, yend = 18/12,
+               linewidth = 0.5) +
+  geom_segment(x = -8.5/12, y = 44/12, xend = 8.5/12, yend = 44/12,
+               linewidth = 0.5) +
+  geom_segment(x = -8.5/12, y = 18/12, xend = -8.5/12, yend = 44/12,
+               linewidth = 0.5) +
+  geom_segment(x = 8.5/12, y = 18/12, xend = 8.5/12, yend = 44/12,
+               linewidth = 0.5) +
+  geom_point(aes(color = pitch_type, shape = type, size = type), alpha = 0.85) + 
+  scale_shape_manual(values = c(1, 4, 18)) +
+  scale_size_manual(values = c(1, 1, 2)) +
+  coord_fixed() +
+  labs(color = "Pitch",
+       size = "Result",
+       shape = "Result",
+       title = "Spencer Strider",
+       subtitle = "Sep. 13, 2023 vs. PHI",
+       caption = "Data from Baseball Savant") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank())
+
+# Single Game Movement by Pitch Type
+strider %>% 
+  ggplot(aes(x = -pfx_x*12, y = pfx_z*12)) +
+  geom_vline(xintercept = 0, linewidth = 0.5) +
+  geom_hline(yintercept = 0, linewidth= 0.5) +
+  geom_point(aes(shape = pitch_type, color = pitch_type), alpha = 0.85) + 
+  coord_fixed() +
+  labs(x = "Induced Horizontal Movement",
+       y = "Induced Vertical Movement",
+       color = "Pitch",
+       shape = "Pitch",
+       title = "Spencer Strider",
+       subtitle = "Sep. 13, 2023 vs. PHI",
+       caption = "Data from Baseball Savant") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank())
+
+# Single Game Pitch Location Clusters
+strider %>% 
+  ggplot(aes(x = -plate_x, y = plate_z, color = pitch_type)) +
+  geom_zone() +
+  geom_mark_hull(expand = unit(2, "mm"), size = .8, show.legend = FALSE) +
+  geom_point(alpha = 0.5) +
+  coord_fixed(ratio = 1) +
+  labs(title = "Spencer Strider", 
+       subtitle = "ATL @ PHI - September 13, 2023",
+       x = "Horizontal Position", y = "Vertical Position", 
+       color = "Release Speed") +
+  theme_bw() +
+  facet_wrap(~pitch_type, nrow = 2)
+
+# Single Game Spin Direction & Pitch Type
+strider %>% 
+  ggplot(aes(x = spin_axis, y = 1)) +
+  geom_point(aes(color = pitch_type), alpha = 0.25) +
+  # geom_jitter(aes(color = pitch_type), width = 0, height = 0.0001) +
+  coord_polar(start = pi) +
+  labs(color = "Pitch",
+       title = "Spencer Strider Spin Direction",
+       subtitle = "ATL @ PHI - September 13, 2023") +
+  scale_x_continuous(breaks = seq(0, 360, 60), limits = c(0, 360)) +
+  theme(panel.grid.minor = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()) +
+  NULL
+
+# Single Game Spin Axis on Sliders
+strider %>% 
+  filter(pitch_type == "SL") %>% 
+  ggplot(aes(x = spin_axis, y = pfx_z)) +
+  geom_point(aes(color = pitch_type), alpha = 0.75) +
+  labs(color = "Pitch",
+       title = "Spencer Strider Spin Direction",
+       subtitle = "ATL @ PHI - September 13, 2023") +
+  geom_smooth(se = FALSE) +
+  NULL
+```
+
+
+<br>
+<br>
+
+### **Season Visualizations**
+
+<br>
+
+```{r EDA 2}
+# Seasonal Movement Plot
+pitchers %>% 
+  filter(pitcher...8 == "641154") %>% 
+  ggplot(aes(x = -pfx_x*12, y = pfx_z*12)) +
+  geom_vline(xintercept = 0, linewidth = 0.5) +
+  geom_hline(yintercept = 0, linewidth= 0.5) +
+  geom_point(aes(color = pitch_name), alpha = 0.35, shape = 18, size = 2) + 
+  coord_fixed() +
+  labs(x = "Induced Horizontal Movement",
+       y = "Induced Vertical Movement",
+       color = "Pitch",
+       shape = "Pitch",
+       title = "Pablo Lopez",
+       subtitle = "2022 Season",
+       caption = "Data from Baseball Savant") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5))
+
+pitchers %>% 
+  filter(pitcher...8 == "666201") %>% 
+  ggplot(aes(x = -pfx_x*12, y = pfx_z*12)) +
+  geom_vline(xintercept = 0, linewidth = 0.5) +
+  geom_hline(yintercept = 0, linewidth= 0.5) +
+  geom_point(aes(color = pitch_name), alpha = 0.35, shape = 18, size = 2) + 
+  coord_fixed() +
+  labs(x = "Induced Horizontal Movement",
+       y = "Induced Vertical Movement",
+       color = "Pitch",
+       shape = "Pitch",
+       title = "Alek Manoah",
+       subtitle = "2022 Season",
+       caption = "Data from Baseball Savant") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5))
+
+
+# Seasonal Sinker Location
+pitchers %>% 
+  filter(pitcher...8 == "641154",
+         pitch_name == "Sinker") %>% 
+  ggplot(aes(x = -plate_x, y = plate_z)) +
+  geom_zone() +
+  geom_plate() +
+  geom_vline(xintercept = 0, linewidth = 0.5) +
+  geom_hline(yintercept = 0, linewidth= 0.5) +
+  geom_point(alpha = 0.65, shape = 18, size = 2.5) + 
+  coord_fixed() +
+  labs(color = "Pitch",
+       shape = "Pitch",
+       title = "Pablo Lopez's Sinkers",
+       subtitle = "2022 Season",
+       caption = "Data from Baseball Savant") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5))
+
+```
+
+<br>
+<br>
+
+### **Comparing Good vs. Bad Pitchers**
+
+```{r Comparing Pitch Shapes and Results}
+# Spin Rate of Four Seams
+pitchers %>% 
+  filter(pitch_type == "FF") %>% 
+  mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
+  ggplot(aes(x = "", y = release_spin_rate)) +
+  geom_jitter(aes(color = ID), width = 0.25, height = 0, alpha = 0.25) +
+  facet_wrap(~ player_name) +
+  labs(title = "Spin Rate of Four-Seams",
+       x = "",
+       y = "Spin Rate (rpm)") +
+  NULL
+
+
+# Induced Movement of Four Seams
+pitchers %>% 
+  filter(pitch_type == "FF") %>% 
+  mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
+  ggplot(aes(x = -pfx_x*12, y = pfx_z*12)) +
+  geom_jitter(aes(color = ID), width = 0.25, height = 0, alpha = 0.25) +
+  facet_wrap(~ player_name) +
+  labs(title = "Induced Movement of Four-Seams") +
+  NULL
+
+
+# Induced Movement of Pitch Arsenal
+pitchers %>% 
+  mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
+  ggplot(aes(x = -pfx_x*12, y = pfx_z*12)) +
+  geom_jitter(aes(color = pitch_name), width = 0.25, height = 0, alpha = 0.25) +
+  facet_wrap(~ player_name) +
+  labs(title = "Induced Movement of Pitch Arsenal") +
+  NULL
+
+
+# Change in Run Expectancy
+pitchers %>% 
+  filter(pitch_type == "FF") %>% 
+  mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
+  ggplot(aes(x = "", y = delta_run_exp)) +
+  geom_jitter(aes(color = ID), width = 0.25, height = 0, alpha = 0.25) +
+  facet_wrap(~ player_name) +
+  labs(title = "Change in Run Expectancy") +
+  NULL
+
+
+# wOBA by pitch by group
+pitchers %>% 
+  mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
+  ggplot(aes(x = player_name, y = estimated_woba_using_speedangle)) +
+  geom_boxplot(aes(fill = pitch_name)) +
+  facet_grid(rows = vars(ID), scales = "free") +
+  labs(title = "xwOBA") +
+  NULL
+
+
+# Making averages dataset
+avg <- pitchers %>% 
+  select(player_name, pitcher...8, ID, pitch_type, release_speed, pfx_x, pfx_z, 
+         release_spin_rate, estimated_woba_using_speedangle) %>% 
+  filter(!is.na(pitch_type)) %>% 
+  group_by(player_name, pitch_type) %>% 
+  summarize("speed" = mean(release_speed, na.rm = TRUE), 
+            "_x" = mean(pfx_x, na.rm = TRUE),
+            "_z" = mean(pfx_z, na.rm = TRUE), 
+            "spin_rate" = mean(release_spin_rate, na.rm = TRUE),
+            xwOBA = mean(estimated_woba_using_speedangle, na.rm = TRUE),
+            Pitches = n()) %>% 
+  as.data.frame()
+```
+
+
+``` {r Differential Metrics}
+
+# Calculating differences in metrics for sliders
+delta_sl <- pitchers %>% 
+  filter(pitch_type == "SL") %>% 
+  left_join(avg, by = c("player_name", "pitch_type")) %>% 
+  mutate(delta_speed = release_speed - speed,
+         delta_mov_x = pfx_x - `_x`,
+         delta_mov_z = pfx_x - `_z`,
+         delta_spin = release_spin_rate - spin_rate) %>% 
+  select(-speed:-spin_rate)
+
+
+# Sliders Speed Diff vs. Avg
+delta_sl %>% 
+  mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
+  ggplot(aes(x = "", y = delta_speed)) +
+  geom_boxplot(aes(fill = ID)) +
+  geom_jitter(width = 0.075, height = 0, alpha = 0.075) +
+  facet_wrap(~ player_name) +
+  labs(title = "Speed Differential (Against Average) for Sliders") +
+  NULL
+
+# Sliders Speed Diff vs. Avg (Absolute Value)
+delta_sl %>% 
+  mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
+  ggplot(aes(x = "", y = abs(delta_speed))) +
+  geom_boxplot(aes(fill = ID)) +
+  geom_jitter(width = 0.075, height = 0, alpha = 0.075) +
+  facet_wrap(~ ID+player_name) +
+  labs(title = "Absolute Speed Differential (Against Average) for Sliders") +
+  NULL
+
+
+# Calculating differences in metrics for all pitches
+delta_all <- pitchers %>% 
+  left_join(avg, by = c("player_name", "pitch_type")) %>% 
+  mutate(delta_speed = release_speed - speed,
+         delta_mov_x = pfx_x - `_x`,
+         delta_mov_z = pfx_x - `_z`,
+         delta_spin = release_spin_rate - spin_rate) %>% 
+  select(-speed:-spin_rate) %>% 
+aggregate(abs(delta_speed) ~ player_name + pitch_type, data = ., FUN = mean) %>% 
+  mutate(ID = case_when(
+    player_name  %in% c("Gallen, Zac", "Manoah, Alek", "Scherzer, Max") ~ "Great",
+    player_name  %in% c("López, Pablo", "Garcia, Luis", "Taillon, Jameson") ~ "Decent",
+    player_name  %in% c("Berríos, José", "Gray, Josiah", "Keller, Brad") ~ "Bad"
+  ))
+
+
+# Absolute speed differential for all pitches
+delta_all %>% 
+  ggplot(aes(x = "", y = `abs(delta_speed)`, color = ID)) +
+  geom_jitter(width = 0.25, show.legend = FALSE) +
+  facet_wrap(~ ID)
+
+
+# Absolute speed differential for all pitches, colored by pitch
+delta_all %>% 
+  ggplot(aes(x = "", y = `abs(delta_speed)`, color = pitch_type)) +
+  geom_jitter(width = 0.25, show.legend = FALSE) +
+  facet_wrap(~ ID)
+
+
+# Four Seams Speed Diff vs. Avg
+pitchers %>% 
+  filter(pitch_type == "FF") %>% 
+  left_join(avg, by = c("player_name", "pitch_type")) %>% 
+  mutate(delta_speed = release_speed - speed,
+         delta_mov_x = pfx_x - `_x`,
+         delta_mov_z = pfx_x - `_z`,
+         delta_spin = release_spin_rate - spin_rate) %>% 
+  mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
+  ggplot(aes(x = "", y = delta_speed, color = xwOBA)) +
+  geom_boxplot(aes(fill = ID), color = "black") +
+  geom_jitter(width = 0.075, height = 0, alpha = 0.075) +
+  scale_color_gradient2(low = "green", midpoint = 0.41, high = "red") +
+  facet_wrap(~ player_name) +
+  labs(title = "Speed Differential (Against Average) for Four Seams") +
+  NULL
+```
+
+```{r Correlations & Basic Models}
+
+pitcher_test <- pitchers %>% 
+  mutate(group_indicator = case_when(
+    ID == "Great" ~ 1,
+    ID == "Decent" ~ 2,
+    ID == "Bad" ~ 3))
+
+# Correlation between spin rate and run expectancy
+pitcher_test %>% 
+  filter(!is.na(release_spin_rate) & !is.na(delta_run_exp)) %>% 
+  with( cor(release_spin_rate, delta_run_exp) )
+
+# Correlation between spin rate and run expectancy
+pitcher_test %>% 
+  filter(!is.na(release_speed) & !is.na(delta_run_exp)) %>% 
+  with( cor(release_speed, delta_run_exp) )
+
+# Can batted ball type predict run expectancy?
+lm(delta_run_exp ~ bb_type, data = pitcher_test)
+# Intercept = Fly Ball
+
+test_model <- pitcher_test %>% 
+  filter( !(player_name  %in% 
+             c("Scherzer, Max", "Taillon, Jameson", "Berríos, José")) ) %>% 
+lm(delta_run_exp ~ bb_type, data = .)
+
+test_testdata <- pitcher_test %>% 
+  filter(player_name  %in% 
+             c("Scherzer, Max", "Taillon, Jameson", "Berríos, José"),
+         !is.na(bb_type)) %>% 
+  select(ID, pitch_type, delta_run_exp, bb_type)
+
+test_testdata %>% 
+  mutate(preds = predict(test_model, test_testdata))
+
+# row.names = FALSE
+```
+
+
+```{r}
+avgs <- arsenal %>% 
+  group_by(pitch_name) %>% 
+  summarize(Speed = round(weighted.mean(pitch_speed, pitch_usage*pitches), 1),
+            "Spin Rate" = round(weighted.mean(spin_rate, pitch_usage*pitches), 0),
+            "H. Break (in.)" = round(weighted.mean(pitcher_break_x, pitch_usage*pitches), 1),
+            "V. Break (in.)" = round(weighted.mean(pitcher_break_z, pitch_usage*pitches), 1),
+            wOBA = round(weighted.mean(wOBA, pitch_usage*pitches), 3),
+            "Whiff Rate" = round(weighted.mean(whiff_percent, pitch_usage*pitches), 1),
+            "Hard Hit Rate" = round(weighted.mean(hard_hit_percent, pitch_usage*pitches), 1)) %>% 
+  as.data.frame() %>% 
+  mutate("Whiff Rate" = paste0(`Whiff Rate`, "%"),
+         "Hard Hit Rate" = paste0(`Hard Hit Rate`, "%")) %>% 
+  rename(Pitch = pitch_name)
+
+avgs %>% 
+  kable()
+```
+
+<br>
+<br>
+
+### **Investigating Difference Variables**
+
+<br>
+
+```{r }
+# Distance from Center
+avg_dist <- pitchers %>% 
+  filter(zone == 1) %>% 
+  summarize(mean(dist))
+avg_dist <- avg_dist$`mean(dist)`[1]
+
+pitchers %>% 
+  ggplot(aes(x = dist)) +
+  geom_histogram(color = "white", binwidth = 0.1)+
+  geom_vline(xintercept = avg_dist, color = "green") +
+   labs(x = "Distance from Center (ft)",
+       title = "Distance from Center Distribution")
+
+# Delta Break
+pitchers %>% 
+  ggplot(aes(x = break_change*12)) +
+  geom_histogram(color = "white", binwidth = 0.5) +
+  labs(x = "Change in Break (in.)",
+       title = "Change in Break Distribution",
+       subtitle = "Change computed versus the average of a given pitch type for a given date.")
+
+# Delta Speed
+pitchers %>% 
+  ggplot(aes(x = speed_change), alpha = 0.5) +
+  geom_histogram(color = "white", binwidth = 0.25) +
+  labs(x = "Change in Speed (mph)",
+       title = "Change in Speed Distribution",
+       subtitle = "Change computed versus the average of a given pitch type for a given date.")
+
+###########
+
+# Distance vs. RE
+pitchers %>% 
+  ggplot(aes(x = dist, y = delta_run_exp, color = pitch_name)) +
+  geom_point(alpha = 0.25) +
+  geom_smooth(se = FALSE, color = "black") +
+  facet_wrap(~pitch_name) +
+  labs(x = "Distance from Center (ft)",
+       title = "Run Expectancy by Distance from Center")
+
+# Delta Break vs. RE
+pitchers %>% 
+  ggplot(aes(x = break_change, y = delta_run_exp, color = pitch_name)) +
+  geom_point(alpha = 0.25) +
+  geom_smooth(se = FALSE, color = "black") +
+  facet_wrap(~pitch_name) +
+  labs(x = "Change in Break (in.)",
+       title = "Run Expectancy by Change in Break")
+
+# Delta Speed vs. RE
+pitchers %>% 
+  ggplot(aes(x = speed_change, y = delta_run_exp, color = pitch_name)) +
+  geom_point(alpha = 0.25) +
+  geom_smooth(se = FALSE, color = "black") +
+  facet_wrap(~pitch_name) +
+  labs(x = "Change in Speed (mph)",
+       title = "Run Expectancy by Change in Speed")
+```
+
+<br>
+
+### **Variable Exploration by Whiff RHP**
+
+``` {r Whiff Exploration RHP, warning = FALSE}
+
+# Pitch Speed
+whiff %>% 
+  ggplot(aes(y = whiff, x = release_speed, color = pitch_name)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~pitch_name) +
+  labs(title = "Whiff vs. Non-Whiff by Pitch Speed",
+       x = "Pitch Speed (mph)",
+       y = "Outcome",
+       color = "Pitch Type") +
+  NULL
+
+
+# Horizontal Movement
+whiff %>% 
+  ggplot(aes(y = whiff, x = pfx_x*12, color = pitch_name)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~pitch_name) +
+  labs(title = "Whiff vs. Non-Whiff by Horizontal Movement",
+       x = "Horizontal Movement (in.)",
+       y = "Outcome",
+       color = "Pitch Type") +
+  NULL
+
+
+# Vertical Movement
+whiff %>% 
+  ggplot(aes(y = whiff, x = pfx_z*12, color = pitch_name)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~pitch_name) +
+  labs(title = "Whiff vs. Non-Whiff by Vertical Movement",
+       x = "Induced Vertical Movement (in.)",
+       y = "Outcome",
+       color = "Pitch Type") +
+  NULL
+
+
+# Horizontal Pitch Location
+whiff %>% 
+  ggplot(aes(y = whiff, x = plate_x, color = pitch_name)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~pitch_name) +
+  labs(title = "Whiff vs. Non-Whiff by Horizontal Pitch Location",
+       x = "Horizontal Pitch Location (ft)",
+       y = "Outcome",
+       color = "Pitch Type") +
+  NULL
+
+
+# Vertical Pitch Location
+whiff %>% 
+  ggplot(aes(y = whiff, x = plate_z, color = pitch_name)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~pitch_name) +
+  labs(title = "Whiff vs. Non-Whiff by Vertical Pitch Location",
+       x = "Vertical Pitch Location (ft)",
+       y = "Outcome",
+       color = "Pitch Type") +
+  NULL
+
+
+# Spin Rate
+whiff %>% 
+  ggplot(aes(y = whiff, x = release_spin_rate, color = pitch_name)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~pitch_name) +
+  labs(title = "Whiff vs. Non-Whiff by Spin Rate",
+       x = "Spin Rate (rpm)",
+       y = "Outcome",
+       color = "Pitch Type") +
+  NULL
+
+```
+
+<br>
+
+### **Variable Exploration by Whiff RHP**
+
+``` {r Whiff Exploration LHP, warning = FALSE}
+
+# Pitch Speed
+whiff_l %>% 
+  ggplot(aes(y = whiff, x = pitch_speed, color = pitch_name)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~pitch_name) +
+  labs(title = "Whiff vs. Non-Whiff by Pitch Speed",
+       x = "Pitch Speed (mph)",
+       y = "Outcome",
+       color = "Pitch Type") +
+  NULL
+
+
+# Horizontal Movement
+whiff_l %>% 
+  ggplot(aes(y = whiff, x = pfx_x*12, color = pitch_name)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~pitch_name) +
+  labs(title = "Whiff vs. Non-Whiff by Horizontal Movement",
+       x = "Horizontal Movement (in.)",
+       y = "Outcome",
+       color = "Pitch Type") +
+  NULL
+
+
+# Vertical Movement
+whiff_l %>% 
+  ggplot(aes(y = whiff, x = pfx_z*12, color = pitch_name)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~pitch_name) +
+  labs(title = "Whiff vs. Non-Whiff by Vertical Movement",
+       x = "Induced Vertical Movement (in.)",
+       y = "Outcome",
+       color = "Pitch Type") +
+  NULL
+
+
+# Horizontal Pitch Location
+whiff_l %>% 
+  ggplot(aes(y = whiff, x = plate_x, color = pitch_name)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~pitch_name) +
+  labs(title = "Whiff vs. Non-Whiff by Horizontal Pitch Location",
+       x = "Horizontal Pitch Location (ft)",
+       y = "Outcome",
+       color = "Pitch Type") +
+  NULL
+
+
+# Vertical Pitch Location
+whiff_l %>% 
+  ggplot(aes(y = whiff, x = plate_z, color = pitch_name)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~pitch_name) +
+  labs(title = "Whiff vs. Non-Whiff by Vertical Pitch Location",
+       x = "Vertical Pitch Location (ft)",
+       y = "Outcome",
+       color = "Pitch Type") +
+  NULL
+
+
+# Spin Rate
+whiff_l %>% 
+  ggplot(aes(y = whiff, x = release_spin_rate, color = pitch_name)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.5) +
+  facet_wrap(~pitch_name) +
+  labs(title = "Whiff vs. Non-Whiff by Spin Rate",
+       x = "Spin Rate (rpm)",
+       y = "Outcome",
+       color = "Pitch Type") +
+  NULL
+
+```
+
+<br>
+
+### **Plotting wOBA and Pitch Speed**
+
+
+```{r wOBA Investigation, warning = FALSE, message = FALSE}
+
+LHP2 <- LHP %>% 
+  mutate(wOBAr = case_when(
+    woba >= 0.360 ~ 6,
+    woba >= 0.335 ~ 5,
+    woba >= 0.310 ~ 4,
+    woba >= 0.285 ~ 3,
+    woba >= 0.260 ~ 2,
+    woba >= 0.235 ~ 1)) %>% 
+  mutate(wOBAr = as.factor(wOBAr))
+
+
+LHP2 %>% 
+  ggplot(aes(x = wOBAr, pitch_speed, color = wOBAr)) +
+  geom_boxplot() +
+  facet_wrap(~ pitch_name)
+
+LHP2 %>% 
+  ggplot(aes(x = estimated_woba_using_speedangle, pitch_speed)) +
+  geom_point(alpha = 0.2) +
+  facet_wrap(~ pitch_name)
+```
+
+<br>
+
+### **Comparing Similar Fastballs (with different whiff rates)**
+
+
+```{r, warning = FALSE, message = FALSE}
+whiff_comparison <- all %>% 
+  filter(pitch_speed > 95.5, pitch_speed < 96,
+         pitch_type == "FF",
+         player_id == c("434378", "450203"))
+
+ff_averages <- all %>% 
+  filter(pitch_type == "FF",
+         !is.na(release_spin_rate)) %>% 
+  group_by(player_name) %>% 
+  summarize(Whiff = mean(whiff),
+            Speed = mean(pitch_speed),
+            "Spin Rate" = mean(release_spin_rate),
+            "X Break" = mean(pfx_x),
+           "Z Break" = mean(pfx_z))
+
+RHP_sample <- ff_averages %>% 
+  filter(between(Speed, 95.5, 96.5),
+         between(`Spin Rate`, 2300, 2400),
+         between(`X Break`, -0.6, -0.4)) %>% 
+  mutate(pitch_hand = "R")
+
+LHP_sample <- ff_averages %>% 
+  filter(between(Speed, 91.5, 92.5),
+         between(`Spin Rate`, 2100, 2200),
+         between(`X Break`, 0.5, 0.7)) %>% 
+  mutate(pitch_hand = "L")
+
+RHP <- all %>% 
+  filter(player_name == c("Woodruff, Brandon", "Montas, Frankie"))
+
+LHP <- all %>% 
+  filter(player_name == c("Corbin, Patrick", "Bubic, Kris"))
+
+sample <- rbind(RHP, LHP) %>% 
+  as.data.frame()
+
+RHP %>% 
+  filter(pitch_type == "FF") %>% 
+  ggplot(aes(x = -plate_x, y = plate_z, 
+             color = player_name)) +
+  geom_zone() +
+  geom_point(alpha = 0.5) +
+  coord_fixed() +
+  facet_wrap(~whiff) +
+  labs(color = "Pitcher",
+       title = "Fastball Location")
+
+RHP %>% 
+  filter(pitch_type == "FF") %>% 
+  ggplot(aes(x = -pfx_x, y = pfx_z, 
+             color = player_name)) +
+  geom_point(alpha = 0.5) +
+  coord_fixed() +
+  facet_wrap(~whiff) +
+  labs(color = "Pitcher",
+       title = "Fastball Movement")
+
+RHP_avg <- RHP %>% 
+  group_by(player_name,
+           pitch_name) %>% 
+  filter(!is.na(release_spin_rate)) %>% 
+  summarize(Pitches = n(),
+            Whiff = mean(whiff),
+            Speed = mean(pitch_speed),
+            "Spin Rate" = mean(release_spin_rate),
+            "X Break" = mean(pfx_x),
+           "Z Break" = mean(pfx_z))
+
+RHP_avg %>% 
+  ggplot(aes(x = -`X Break`, y = `Z Break`,
+             color = Whiff, shape = player_name)) +
+  geom_hline(yintercept = 0, size = 0.5, color = "black") +
+  geom_vline(xintercept = 0, size = 0.5, color = "black") +
+  coord_fixed() +
+  geom_point() +
+  scale_color_gradient(low = "yellow2", high = "green") +
+  facet_wrap(~ pitch_name)
+
+
+LHP %>% 
+  filter(pitch_type == "FF") %>% 
+  ggplot(aes(x = -plate_x, y = plate_z, 
+             color = player_name)) +
+  geom_zone() +
+  geom_point(alpha = 0.5) +
+  coord_fixed() +
+  facet_wrap(~whiff) +
+  labs(color = "Pitcher",
+       title = "Fastball Location")
+
+LHP %>% 
+  filter(pitch_type == "FF") %>% 
+  ggplot(aes(x = -pfx_x, y = pfx_z, 
+             color = player_name)) +
+  geom_point(alpha = 0.5) +
+  coord_fixed() +
+  facet_wrap(~whiff) +
+  labs(color = "Pitcher",
+       title = "Fastball Movement")
+
+LHP_avg <- LHP %>% 
+  group_by(player_name,
+           pitch_name) %>% 
+  filter(!is.na(release_spin_rate)) %>% 
+  summarize(Pitches = n(),
+            Whiff = mean(whiff),
+            Speed = mean(pitch_speed),
+            "Spin Rate" = mean(release_spin_rate),
+            "X Break" = mean(pfx_x),
+           "Z Break" = mean(pfx_z))
+
+LHP_avg %>% 
+  ggplot(aes(x = -`X Break`, y = `Z Break`,
+             color = Whiff, shape = player_name)) +
+  geom_hline(yintercept = 0, size = 0.5, color = "black") +
+  geom_vline(xintercept = 0, size = 0.5, color = "black") +
+  coord_fixed() +
+  geom_point() +
+  scale_color_gradient(low = "yellow2", high = "green") +
+  facet_wrap(~ pitch_name)
+```
+
+```{r}
+test <- all %>% 
+  group_by(player_name) %>% 
+  summarize(woba = mean(woba),
+            whiff = mean(whiff))
+
+X2022_stats <- read_csv("Pitcher Seasonal Data/2022_stats.csv")
+
+stats <- X2022_stats %>% 
+  mutate(player_name = `last_name, first_name`) %>% 
+  left_join(test, by = "player_name") %>% 
+  filter(!is.na(whiff))
+
+stats %>% 
+  ggplot(aes(x = whiff, y = k_percent/100)) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  labs(x = "Whiff Rate",
+       y = "Strikeout Percentage",
+       title = "Strikeout Percentage vs. Whiff Rate",
+       caption = "Data from Baseball Savant",
+       subtitle = "Data: 2022 Seasonal Stats for Pitchers with 1800+ Pitches") +
+  scale_x_continuous(labels = scales::percent) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+cor(stats$p_era, stats$k_percent)
+```
+
+```{r Whiff Rate Predictions, warning = FALSE, message = FALSE}
+
+# Speed
+all %>% 
+  mutate(speed_rounded = round(pitch_speed, 1)) %>% 
+  group_by(pitch_name, speed_rounded) %>% 
+  summarize(whiff_rate = mean(whiff), pitches = n()) %>% 
+  filter(pitches >= 10) %>% 
+  ggplot(aes(x = speed_rounded, y = whiff_rate)) +
+  geom_point(aes(color = whiff_rate),
+             size = 0.5, show.legend = FALSE) +
+  geom_smooth(se = FALSE, size = 0.5) +
+  facet_wrap(~ pitch_name) +
+  scale_color_gradient(low = "skyblue", high = "firebrick") +
+  labs(x = "Pitch Speed",
+       y = "Whiff Rate",
+       title = "Whiff Rate vs. Pitch Speed",
+       caption = "Shows speeds to one decimal with at least 10 pitches/observations.") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+
+# Spin
+all %>% 
+  mutate(spin_rounded = round(release_spin_rate, -1)) %>% 
+  group_by(pitch_name, spin_rounded) %>% 
+  summarize(whiff_rate = mean(whiff), pitches = n()) %>% 
+  filter(pitches >= 10) %>% 
+  ggplot(aes(x = spin_rounded, y = whiff_rate)) +
+  geom_point(aes(color = whiff_rate),
+             size = 0.5, show.legend = FALSE) +
+  geom_smooth(se = FALSE, size = 0.5) +
+  facet_wrap(~ pitch_name) +
+  scale_color_gradient(low = "skyblue", high = "firebrick") +
+  labs(x = "Spin Rate (rpm)",
+       y = "Whiff Rate",
+       title = "Whiff Rate vs. Spin Rate",
+       caption = "Shows spin rate groups rounded to the tens place with at least 10 pitches/observations.") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+
+# Horizontal Movement
+all %>% 
+  mutate(movement_rounded = round(pfx_x*12*2)/2) %>% 
+  group_by(pitch_name, movement_rounded) %>% 
+  summarize(whiff_rate = mean(whiff), pitches = n()) %>% 
+  filter(pitches >= 10) %>% 
+  ggplot(aes(x = movement_rounded, y = whiff_rate)) +
+  geom_point(aes(color = whiff_rate),
+             size = 0.5, show.legend = FALSE) +
+  geom_smooth(se = FALSE, size = 0.5) +
+  facet_wrap(~ pitch_name) +
+  scale_color_gradient(low = "skyblue", high = "firebrick") +
+  labs(x = "Horizontal Break (in.)",
+       y = "Whiff Rate",
+       title = "Whiff Rate vs. Horizontal Break (in.)",
+       caption = "Shows horizontalpitch movement groups rounded to the nearest
+       0.5 with at least 10 pitches/observations.") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+
+
+# Vertical Movement
+all %>% 
+  mutate(movement_rounded = round(pfx_z*12*2)/2) %>% 
+  group_by(pitch_name, movement_rounded) %>% 
+  summarize(whiff_rate = mean(whiff), pitches = n()) %>% 
+  filter(pitches >= 10) %>% 
+  ggplot(aes(x = movement_rounded, y = whiff_rate)) +
+  geom_point(aes(color = whiff_rate),
+             size = 0.5, show.legend = FALSE) +
+  geom_smooth(se = FALSE, size = 0.5) +
+  facet_wrap(~ pitch_name) +
+  scale_color_gradient(low = "skyblue", high = "firebrick") +
+  labs(x = "Vertical Break (in.)",
+       y = "Whiff Rate",
+       title = "Whiff Rate vs. Vertical Break (in.)",
+       caption = "Shows vertical pitch movement groups rounded to the nearest
+       0.5 with at least 10 pitches/observations.") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+```
+
