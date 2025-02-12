@@ -1,0 +1,725 @@
+---
+title: "Week 9"
+author: "Evan Wu"
+output: 
+  html_document:
+    code_folding:
+      hide
+---
+
+<br>
+
+#### Code Background
+
+Looking at whiff data for right-handed pitchers (from 2022, 85 pitchers with
+1842+ seasonal pitches). 
+
+<br>
+
+#### Libraries
+```{r Libraries, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(knitr)
+library(glmnet)
+library(patchwork)
+library(olsrr)
+library(broom)
+options(scipen = 999)
+library(RColorBrewer)
+library(Metrics)
+```
+
+
+``` {r Functions, }
+# Geom Zone (Jackie's) ####
+
+geom_zone <- function(top = 11/3, bottom = 3/2, linecolor = "black"){
+  geom_rect(xmin = -.7083, xmax = .7083, ymin = bottom, ymax = top,
+            alpha = 0, color = linecolor, linewidth = 0.75)
+}
+
+# c(0, 0, -.25, -.5, -.25))
+
+geom_plate <- function(pov = "pitcher"){
+   df <- case_when(
+     pov == "pitcher" ~ 
+       data.frame(x = c(-.7083, .7083, .7083 ,0, -.7083), y = c(0, 0, .25, .5, .25)),
+     pov == "catcher" ~ 
+       data.frame(x = c(-.7083, .7083, .7083 ,0, -.7083), y = c(0, 0, -.25, -.5, -.25))
+   )
+  
+   g <- geom_polygon(data = df, aes(x = x, y = y), fill = "white", color = "black", linewidth = 1.25)
+  g
+}
+
+# Barrel Function
+is.barrel <- function(LA, EV){
+  upper <- 1.11*EV - 78.89
+  lower <- -EV + 124
+  outcome <- (LA >= lower) & (LA <= upper) & (EV >= 98) & (LA >= 8) & (LA <= 50)
+  outcome <- replace_na(outcome, FALSE)
+  outcome
+}
+
+swap_names <- function(name) {
+  parts <- strsplit(name, ", ")[[1]]
+  if (length(parts) == 2) {
+    return(paste(rev(parts), collapse = " "))
+  } else {
+    return(name)
+  }
+}
+
+```
+
+#### Data
+Added code to calculate whether a batted ball is a barrel or not.
+Used code to find the slopes and intercepts for both lines and then inputted
+rounded coefficients into the model for more simplicity.
+
+Added predicted whiff rate. There were a few hitters with more than 300 pitches
+of a given pitch type, so for those I used their true whiff percentage.
+
+Also added a strike metric that includes all pitches that can strike a hitter out:
+called and swinging strikes, as well as foul tips and foul bunts.
+
+```{r Data, message = FALSE, warning = FALSE}
+
+rhp <- read_csv("CSVs/rhp_pitches.csv") %>% 
+  select(-...1) %>% 
+  filter(!is.na(pfx_z)) %>% 
+  mutate(distance_sweet = sqrt(((plate_x - 0.85)^2)+((plate_z - 1.55)^2))) %>% 
+  filter(distance < 2) %>% 
+  mutate(ab_id = paste0(game_date, "_", player_id, "_", at_bat_number),
+         prev_ab_id = lead(ab_id, 1)) %>% 
+  mutate(prev_pitch = ifelse(ab_id == prev_ab_id, lead(pitch_type, 1), NA)) %>% 
+  select(-ab_id, -prev_ab_id) %>% 
+  mutate(prev_pitch = case_when(prev_pitch  %in% c("FF", "FC", "SI") ~ "Fastball",
+                                prev_pitch %in% c("SL", "CU", "KC", 
+                                                  "SV", "ST", "CS") ~ "Breaking Ball",
+                                prev_pitch  %in% c("CH", "FS") ~ "Off Speed")) %>% 
+  mutate(zone = relevel(as.factor(zone), ref = 5))
+
+
+# Barrel
+rhp <- rhp %>% 
+  mutate(Barrel = is.barrel(LA = launch_angle, EV = launch_speed))
+
+# Strike
+rhp <- rhp %>% 
+  mutate(STRIKE = ifelse(description  %in% c("called_strike", "swinging_strike",
+                                           "foul_tip", "bunt_foul_tip", "foul_bunt",
+                                           "swinging_strike_blocked", "missed_bunt"),
+                       1, 0))
+
+
+# Batter Whiff
+batter_stats <- rhp %>% 
+  summarize(rate = mean(whiff),
+                      pitches = n(),
+            .by = c(batter, pitch_type)) %>% 
+  mutate(pitch_whiff = weighted.mean(rate, pitches),
+         .by = pitch_type) %>% 
+  mutate(pred_bwhiff = (pitches / 300)*rate + ((300-pitches)/300)*pitch_whiff) %>% 
+  mutate(pred_bwhiff = ifelse(pitches >= 300, rate, pred_bwhiff))
+
+
+# Merging Whiff Prediction with RHP
+rhp <- rhp %>% 
+  left_join(select(batter_stats, batter, pitch_type, pred_bwhiff), 
+             by = c("batter" = "batter", "pitch_type" = "pitch_type"))
+
+rhp <- rhp %>% 
+  mutate(prev_pitch = ifelse(is.na(prev_pitch), "None", prev_pitch)) %>% 
+  mutate(Count = paste0(balls, "-", strikes)) %>% 
+  mutate(Count = as.factor(Count))
+
+# Adding Proportional Distance
+rhp <- rhp %>% 
+  mutate(dist_x = plate_x/0.708333,
+         center = (sz_top + sz_bot) / 2,
+         dist_z = ifelse(plate_z >= center, 
+                         (plate_z - center) / (sz_top - center), 
+                         (plate_z - center) / (center - sz_bot)),
+         dist_prop = sqrt(dist_z^2 + dist_x^2))
+
+
+# Barrel
+batter_stats2 <- rhp %>% 
+  summarize(rate = mean(Barrel),
+                      pitches = n(),
+            .by = c(batter, pitch_type)) %>% 
+  mutate(pitch_barrel = weighted.mean(rate, pitches),
+         .by = pitch_type) %>% 
+  mutate(pred_bbarrel = (pitches / 300)*rate + ((300-pitches)/300)*pitch_barrel) %>% 
+  mutate(pred_bbarrel = ifelse(pitches >= 300, rate, pred_bbarrel))
+
+rhp <- rhp %>% 
+  left_join(select(batter_stats2, batter, pitch_type, pred_bbarrel), 
+             by = c("batter" = "batter", "pitch_type" = "pitch_type"))
+
+
+# Strike
+batter_stats3 <- rhp %>% 
+  summarize(rate = mean(STRIKE),
+                      pitches = n(),
+            .by = c(batter, pitch_type)) %>% 
+  mutate(pitch_strike = weighted.mean(rate, pitches),
+         .by = pitch_type) %>% 
+  mutate(pred_bstrike = (pitches / 300)*rate + ((300-pitches)/300)*pitch_strike) %>% 
+  mutate(pred_bstrike = ifelse(pitches >= 300, rate, pred_bstrike))
+
+rhp <- rhp %>% 
+  left_join(select(batter_stats3, batter, pitch_type, pred_bstrike), 
+             by = c("batter" = "batter", "pitch_type" = "pitch_type"))
+
+
+sliders <- rhp %>% 
+  filter(hitter == "R") %>% 
+  filter(pitch_type == "SL") %>% 
+  mutate(count = paste0(balls, "_", strikes),
+         prev_pitch = as.factor(prev_pitch)) %>% 
+  mutate(prev_pitch_ff = ifelse(prev_pitch == "FF", 1, 0))
+  
+fastballs <- rhp %>% 
+  filter(hitter == "R") %>% 
+  filter(pitch_type == fb_type) %>% 
+  mutate(count = paste0(balls, "_", strikes),
+         prev_pitch = as.factor(prev_pitch))
+
+
+
+lhp <- read_csv("CSVs/lhp_pitches.csv") %>% 
+  select(-...1) %>% 
+  filter(!is.na(pfx_z)) %>% 
+  mutate(distance_sweet = sqrt(((plate_x - 0.85)^2)+((plate_z - 1.55)^2))) %>% 
+  mutate(zone = case_when(distance < 2 ~ zone,
+                          distance >= 2 & plate_z > (sz_top + sz_bot)/2 ~ 16,
+                          distance >= 2 & plate_z <= (sz_top + sz_bot)/2 ~ 17)) %>% 
+  mutate(ab_id = paste0(game_date, "_", player_id, "_", at_bat_number),
+         prev_ab_id = lead(ab_id, 1)) %>% 
+  mutate(prev_pitch = ifelse(ab_id == prev_ab_id, lead(pitch_type, 1), NA)) %>% 
+  select(-ab_id, -prev_ab_id) %>% 
+  mutate(prev_pitch = case_when(prev_pitch  %in% c("FF", "FC", "SI") ~ "Fastball",
+                                prev_pitch %in% c("SL", "CU", "KC", 
+                                                  "SV", "ST", "CS") ~ "Breaking Ball",
+                                prev_pitch  %in% c("CH", "FS") ~ "Off Speed")) %>% 
+  mutate(zone = relevel(as.factor(zone), ref = 5))
+
+# Barrel
+lhp <- lhp %>% 
+  mutate(Barrel = is.barrel(LA = launch_angle, EV = launch_speed))
+
+# Strike
+lhp <- lhp %>% 
+  mutate(STRIKE = ifelse(description  %in% c("called_strike", "swinging_strike",
+                                           "foul_tip", "bunt_foul_tip", "foul_bunt",
+                                           "swinging_strike_blocked", "missed_bunt"),
+                       1, 0))
+
+
+# Batter Whiff
+batter_stats_l <- lhp %>% 
+  summarize(rate = mean(whiff),
+                      pitches = n(),
+            .by = c(batter, pitch_type)) %>% 
+  mutate(pitch_whiff = weighted.mean(rate, pitches),
+         .by = pitch_type) %>% 
+  mutate(pred_bwhiff = (pitches / 300)*rate + ((300-pitches)/300)*pitch_whiff) %>% 
+  mutate(pred_bwhiff = ifelse(pitches >= 300, rate, pred_bwhiff))
+
+
+# Merging Whiff Prediction with LHP
+lhp <- lhp %>% 
+  left_join(select(batter_stats_l, batter, pitch_type, pred_bwhiff), 
+             by = c("batter" = "batter", "pitch_type" = "pitch_type"))
+
+lhp <- lhp %>% 
+  mutate(prev_pitch = ifelse(is.na(prev_pitch), "None", prev_pitch)) %>% 
+  mutate(Count = paste0(balls, "-", strikes)) %>% 
+  mutate(Count = as.factor(Count))
+
+# Adding Proportional Distance
+lhp <- lhp %>% 
+  mutate(dist_x = plate_x/0.708333,
+         center = (sz_top + sz_bot) / 2,
+         dist_z = ifelse(plate_z >= center, 
+                         (plate_z - center) / (sz_top - center), 
+                         (plate_z - center) / (center - sz_bot)),
+         dist_prop = sqrt(dist_z^2 + dist_x^2))
+
+
+# Barrel
+batter_stats2_l <- lhp %>% 
+  summarize(rate = mean(Barrel),
+                      pitches = n(),
+            .by = c(batter, pitch_type)) %>% 
+  mutate(pitch_barrel = weighted.mean(rate, pitches),
+         .by = pitch_type) %>% 
+  mutate(pred_bbarrel = (pitches / 300)*rate + ((300-pitches)/300)*pitch_barrel) %>% 
+  mutate(pred_bbarrel = ifelse(pitches >= 300, rate, pred_bbarrel))
+
+lhp <- lhp %>% 
+  left_join(select(batter_stats2_l, batter, pitch_type, pred_bbarrel), 
+             by = c("batter" = "batter", "pitch_type" = "pitch_type"))
+
+
+# Strike
+batter_stats3_l <- lhp %>% 
+  summarize(rate = mean(STRIKE),
+                      pitches = n(),
+            .by = c(batter, pitch_type)) %>% 
+  mutate(pitch_strike = weighted.mean(rate, pitches),
+         .by = pitch_type) %>% 
+  mutate(pred_bstrike = (pitches / 300)*rate + ((300-pitches)/300)*pitch_strike) %>% 
+  mutate(pred_bstrike = ifelse(pitches >= 300, rate, pred_bstrike))
+
+lhp <- lhp %>% 
+  left_join(select(batter_stats3_l, batter, pitch_type, pred_bstrike), 
+             by = c("batter" = "batter", "pitch_type" = "pitch_type"))
+
+```
+
+
+```{r Pitcher Season Stats}
+full <- rbind(rhp, lhp) %>% 
+  mutate(Barrel = ifelse(Barrel == TRUE, 1, 0),
+         whiff = ifelse(whiff == TRUE, 1, 0))
+
+pitcher_list <- full %>% 
+  group_by(player_id, hitter, pitch_type) %>% 
+  summarize(n = n())
+
+full <- full %>% 
+  left_join(pitcher_list, by = c("player_id", "hitter", "pitch_type")) %>% 
+  filter(n >= 100)
+
+full_summary <- full %>% 
+  group_by(player_id, player_name, pitch_type, p_throws, hitter) %>% 
+  summarize("Pitches" = n(), 
+            "Speed" = mean(pitch_speed, na.rm = TRUE), 
+            "Spin Rate" = mean(release_spin_rate, na.rm = TRUE), 
+            "X Movement" = mean(pfx_x, na.rm = TRUE), 
+            "Z Movement" = mean(pfx_z, na.rm = TRUE),
+            "Whiff Prop" = mean(whiff, na.rm = TRUE), 
+            "Strike Prop" = mean(STRIKE, na.rm = TRUE),
+            "Barrel Prop" = mean(Barrel, na.rm = TRUE)) %>% 
+  mutate(Name = sapply(player_name, swap_names)) %>% 
+  ungroup() %>% 
+  select(Name, pitch_type:`Barrel Prop`)
+
+# write.csv(full_summary, "Pitcher_Comps.csv")
+```
+
+
+### Four Seam Fastballs RHP to RHH
+
+##### Whiff - Removed: pfx_x
+##### Barrel - Removed: pfx_z, dist_prop, pfx_x, pfx_total, zone (multiple at 0.05-0.06)
+##### Strike - Removed: pitch_speed, pfx_x, pfx_total
+
+```{r FB RHP RHH, warning = FALSE, message = FALSE}
+fb_r <- rhp %>% 
+  filter(pitch_type == "FF",
+         hitter == "R") %>% 
+  mutate(Barrel = ifelse(Barrel == TRUE, 1, 0),
+         whiff = ifelse(whiff == TRUE, 1, 0))
+
+
+# Whiff ####
+
+# Refined Model
+fb_r_whiff <- glm(whiff ~ pitch_speed + pfx_z + pfx_total + zone + dist_x + dist_z +
+                  dist_prop + I(dist_x^2) + I(dist_z^2) + release_spin_rate + pred_bwhiff,
+              data = fb_r, family = binomial)
+
+# Removed: pfx_x
+
+# Model Evaluation
+summary(fb_r_whiff)
+
+fb_r_whiff_test <- augment(fb_r_whiff, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
+   mutate(Response = "whiff",
+         Hand = "right",
+         pitch = "fastball")
+
+
+rmse(fb_r_whiff_test$prediction, fb_r_whiff_test$whiff)
+
+
+
+# Barrel ####
+
+# Refined Model
+fb_r_barrel <- glm(Barrel ~ pitch_speed + dist_x + dist_z + zone +
+                  I(dist_x^2) + I(dist_z^2) + pred_bbarrel,
+              data = fb_r, family = binomial)
+
+# Removed: pfx_x, dist_prop, pfx_total, pfx_z, release_spin_rate
+
+# Model Evaluation
+summary(fb_r_barrel)
+
+fb_r_barrel_test <- augment(fb_r_barrel, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
+  mutate(Response = "barrel",
+         Hand = "right",
+         pitch = "fastball")
+
+
+rmse(fb_r_barrel_test$prediction, fb_r_barrel_test$Barrel)
+
+
+
+
+# Strike ####
+
+# Refined Model
+fb_r_strike <- glm(STRIKE ~ pfx_z + zone + dist_x + dist_z +
+                  dist_prop + I(dist_x^2) + I(dist_z^2) + release_spin_rate + pred_bwhiff,
+              data = fb_r, family = binomial)
+
+# Removed: pitch_speed, pfx_x, pfx_total
+
+# Model Evaluation
+# summary(fb_r_strike)
+
+fb_r_strike_test <- augment(fb_r_strike, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>%
+  mutate(Response = "strike",
+         Hand = "right",
+         pitch = "fastball")
+
+
+rmse(fb_r_strike_test$prediction, fb_r_strike_test$STRIKE)
+
+```
+
+
+
+### Four Seam Fastballs RHP to LHH
+
+##### Whiff - Removed: pfx_x, pfx_z
+##### Barrel - Removed: release_spin_rate + pfx_total
+##### Strike - Removed: pfx_x, pfx_z
+
+```{r FB RHP LHH, warning = FALSE, message = FALSE}
+fb_l <- rhp %>% 
+  filter(pitch_type == "FF",
+         hitter == "L") %>% 
+  mutate(Barrel = ifelse(Barrel == TRUE, 1, 0),
+         whiff = ifelse(whiff == TRUE, 1, 0))
+
+
+# Whiff ####
+
+# Refined Model
+fb_l_whiff <- glm(whiff ~ pitch_speed + pfx_total + zone + dist_x + dist_z +
+                  dist_prop + I(dist_x^2) + I(dist_z^2) + release_spin_rate + pred_bwhiff,
+              data = fb_l, family = binomial)
+
+# Removed: pfx_x, pfx_z
+
+# Model Evaluation
+# summary(fb_l_whiff)
+
+fb_l_whiff_test <- augment(fb_l_whiff, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
+  mutate(Response = "whiff",
+         Hand = "left",
+         pitch = "fastball")
+
+
+rmse(fb_l_whiff_test$prediction, fb_l_whiff_test$whiff)
+
+
+
+
+# Barrel ####
+
+# Refined Model
+fb_l_barrel <- glm(Barrel ~ pitch_speed + pfx_x + zone + dist_x + 
+                  dist_z + I(dist_x^2) + I(dist_z^2) +  pred_bbarrel,
+              data = fb_l, family = binomial)
+
+# Removed: release_spin_rate + pfx_total
+
+# Model Evaluation
+# summary(fb_l_barrel)
+
+fb_l_barrel_test <- augment(fb_l_barrel, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
+  mutate(Response = "barrel",
+         Hand = "left",
+         pitch = "fastball")
+
+
+rmse(fb_l_barrel_test$prediction, fb_l_barrel_test$Barrel)
+
+
+
+
+
+# Strike ####
+
+# Refined Model
+fb_l_strike <- glm(STRIKE ~ pitch_speed + pfx_total + zone + dist_x + dist_z +
+                  dist_prop + I(dist_x^2) + I(dist_z^2) + release_spin_rate + pred_bstrike,
+              data = fb_l, family = binomial)
+
+# Removed: pfx_x, pfx_z
+
+# Model Evaluation
+# summary(fb_l_strike)
+
+fb_l_strike_test <- augment(fb_l_strike, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
+  mutate(Response = "strike",
+         Hand = "left",
+         pitch = "fastball")
+
+
+rmse(fb_l_strike_test$prediction, fb_l_strike_test$STRIKE)
+```
+
+
+
+### Sliders RHP to RHH
+
+##### Whiff - Removed: pitch_speed
+##### Barrel - Removed: release_spin_rate, pfx_total, dist_prop, zone, pfx_x, pfx_z, pitch_speed
+##### Strike - Removed: None
+
+```{r SL RHP RHH, warning = FALSE, message = FALSE}
+sl_r <- rhp %>% 
+  filter(pitch_type == "SL",
+         hitter == "R") %>% 
+  mutate(Barrel = ifelse(Barrel == TRUE, 1, 0),
+         whiff = ifelse(whiff == TRUE, 1, 0))
+
+
+# Whiff ####
+
+# Refined Model
+sl_r_whiff <- glm(whiff ~ pfx_x + pfx_z + pfx_total + zone + dist_x + dist_z +
+                  dist_prop + I(dist_x^2) + I(dist_z^2) + release_spin_rate + pred_bwhiff,
+              data = sl_r, family = binomial)
+
+# Removed: pitch_speed
+
+# Model Evaluation
+# summary(sl_r_whiff)
+
+sl_r_whiff_test <- augment(sl_r_whiff, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
+  mutate(Response = "whiff",
+         Hand = "right",
+         pitch = "slider")
+
+
+rmse(sl_r_whiff_test$prediction, sl_r_whiff_test$whiff)
+
+
+
+
+
+# Barrel ####
+
+# Refined Model
+sl_r_barrel <- glm(Barrel ~ dist_x + dist_z +
+                  I(dist_x^2) + I(dist_z^2) + pred_bbarrel,
+              data = sl_r, family = binomial)
+
+# Removed: release_spin_rate, pfx_total, dist_prop, zone, pfx_x, pfx_z, pitch_speed
+
+# Model Evaluation
+# summary(sl_r_barrel)
+
+sl_r_barrel_test <- augment(sl_r_barrel, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
+  mutate(Response = "barrel",
+         Hand = "right",
+         pitch = "slider")
+
+
+rmse(sl_r_barrel_test$prediction, sl_r_barrel_test$Barrel)
+
+
+
+
+
+# Strike ####
+
+# Refined Model
+sl_r_strike <- glm(STRIKE ~ pitch_speed + pfx_x + pfx_z + pfx_total + zone + dist_x + dist_z +
+                  dist_prop + I(dist_x^2) + I(dist_z^2) + release_spin_rate + pred_bstrike,
+              data = sl_r, family = binomial)
+
+# Removed: None
+
+# Model Evaluation
+# summary(sl_r_strike)
+
+sl_r_strike_test <- augment(sl_r_strike, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
+  mutate(Response = "strike",
+         Hand = "right",
+         pitch = "slider")
+
+
+rmse(sl_r_strike_test$prediction, sl_r_strike_test$STRIKE)
+
+
+```
+
+
+
+
+### Sliders RHP to LHH
+
+##### Whiff - Removed: pfx_z, pfx_x, pfx_total
+##### Barrel - Removed: pfx_total, dist_prop, release_spin_rate
+##### Strike - Removed: pfx_z, release_spin_rate, pitch_speed
+
+```{r SL RHP LHH, warning = FALSE, message = FALSE}
+sl_l <- rhp %>% 
+  filter(pitch_type == "SL",
+         hitter == "L") %>% 
+  mutate(Barrel = ifelse(Barrel == TRUE, 1, 0),
+         whiff = ifelse(whiff == TRUE, 1, 0))
+
+
+# Whiff ####
+
+# Refined Model
+sl_l_whiff <- glm(whiff ~ pitch_speed + zone + dist_x + dist_z +
+                  dist_prop + I(dist_x^2) + I(dist_z^2) + release_spin_rate + pred_bwhiff,
+              data = sl_l, family = binomial)
+
+# Removed: pfx_z, pfx_x, pfx_total
+
+# Model Evaluation
+# summary(sl_l_whiff)
+
+sl_l_whiff_test <- augment(sl_l_whiff, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
+  mutate(Response = "whiff",
+         Hand = "left",
+         pitch = "slider")
+
+rmse(sl_l_whiff_test$prediction, sl_l_whiff_test$whiff)
+
+
+
+
+
+# Barrel ####
+
+# Refined Model
+sl_l_barrel <- glm(Barrel ~ pitch_speed + pfx_x + pfx_z + zone + dist_x + dist_z +
+                  I(dist_x^2) + I(dist_z^2) + pred_bbarrel,
+              data = sl_l, family = binomial)
+
+# Removed: pfx_total, dist_prop, release_spin_rate
+
+# Model Evaluation
+# summary(sl_l_barrel)
+
+sl_l_barrel_test <- augment(sl_l_barrel, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
+  mutate(Response = "barrel",
+         Hand = "left",
+         pitch = "slider")
+
+
+rmse(sl_l_barrel_test$prediction, sl_l_barrel_test$Barrel)
+
+
+
+
+
+
+
+# Strike ####
+
+# Refined Model
+sl_l_strike <- glm(STRIKE ~ pfx_x + pfx_total + zone + dist_x + dist_z +
+                  dist_prop + I(dist_x^2) + I(dist_z^2) + pred_bstrike,
+              data = sl_l, family = binomial)
+
+# Removed: pfx_z, release_spin_rate, pitch_speed
+
+# Model Evaluation
+# summary(sl_l_strike)
+
+sl_l_strike_test <- augment(sl_l_strike, type.predict = "response") %>% 
+  rename(prediction = `.fitted`) %>% 
+  mutate(Response = "strike",
+         Hand = "left",
+         pitch = "slider")
+
+
+rmse(sl_l_strike_test$prediction, sl_l_strike_test$STRIKE)
+```
+
+
+```{r Models, warning = FALSE, message = FALSE}
+models <- rbind(
+  tidy(fb_r_whiff) %>% mutate(Response = "whiff",
+  Hand = "left", Pitch = "fastball"),
+  tidy(fb_r_barrel) %>% mutate(Response = "barrel",
+  Hand = "left", Pitch = "fastball"),
+  tidy(fb_r_strike) %>% mutate(Response = "strike",
+  Hand = "left", Pitch = "fastball"),
+  
+  tidy(fb_l_whiff) %>% mutate(Response = "whiff",
+  Hand = "left", Pitch = "fastball"),
+  tidy(fb_l_barrel) %>% mutate(Response = "barrel",
+  Hand = "left", Pitch = "fastball"),
+  tidy(fb_l_strike) %>% mutate(Response = "strike",
+  Hand = "left", Pitch = "fastball"),
+  
+  tidy(sl_r_whiff) %>% mutate(Response = "whiff",
+  Hand = "right", Pitch = "slider"),
+  tidy(sl_r_barrel) %>% mutate(Response = "barrel",
+  Hand = "right", Pitch = "slider"),
+  tidy(sl_r_strike) %>% mutate(Response = "strike",
+  Hand = "right", Pitch = "slider"),
+  
+  tidy(sl_l_whiff) %>% mutate(Response = "whiff",
+  Hand = "left", Pitch = "slider"),
+  tidy(sl_l_barrel) %>% mutate(Response = "barrel",
+  Hand = "left", Pitch = "slider"),
+  tidy(sl_l_strike) %>% mutate(Response = "strike",
+  Hand = "left", Pitch = "slider"))
+
+
+# write.csv(models, "models2.csv")
+```
+
+# Pred Averages ####
+
+```{r Pred Averages, warning = FALSE, message = FALSE}
+batter_preds_r <- batter_stats %>% 
+  left_join(batter_stats2, by = c("batter", "pitch_type")) %>% 
+  left_join(batter_stats3, by = c("batter", "pitch_type")) %>% 
+  select(batter, pitch_type, pitches, pred_bwhiff, pred_bbarrel, pred_bstrike) %>% 
+  mutate(hitter = "R")
+
+batter_preds_l <- batter_stats_l %>% 
+  left_join(batter_stats2_l, by = c("batter", "pitch_type")) %>% 
+  left_join(batter_stats3_l, by = c("batter", "pitch_type")) %>% 
+  select(batter, pitch_type, pitches, pred_bwhiff, pred_bbarrel, pred_bstrike) %>% 
+  mutate(hitter = "L")
+
+pred_means <- rbind(batter_preds_r, batter_preds_l) %>% 
+  group_by(hitter, pitch_type) %>% 
+  summarize(whiff_mean = weighted.mean(pred_bwhiff, pitches, na.rm = TRUE),
+            barrel_mean = weighted.mean(pred_bbarrel, pitches, na.rm = TRUE),
+            strike_mean = weighted.mean(pred_bstrike, pitches, na.rm = TRUE))
+
+# write.csv(pred_means, "pred means.csv")
+```
+
+

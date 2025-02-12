@@ -1,0 +1,173 @@
+# Libraries ####
+library(tidyverse)
+library(readxl)
+library(ggforce)
+
+# Data Import ####
+data <- read_csv("pitch_arsenals.csv")
+movement <- read_csv("~/Downloads/Baseball Analytics/Diamond Dollars 2023/Statcast Data 2022/Group B/Libka 9-12-22/TEX at MIA 9-12-22.csv")
+
+movement %>% 
+  select(pitch_type, release_speed, p_throws, pfx_x, pfx_z) %>% 
+  View()
+
+strider <- read_csv("Strider_9_13_23.csv") %>% 
+  select(-game_date, -`pitcher...8`, -spin_dir:-break_length_deprecated,
+         -game_type, -home_team, -away_team)
+
+
+files <- list.files("Data")
+
+pitchers <- read_csv(paste0("Data/", files[1]))
+
+for(i in 2:length(files)) {
+pitchers <- rbind(pitchers,
+                  read_csv(paste0("Data/",files[i])))
+}
+
+unique(pitchers$pitcher...60)
+
+
+# Geom Zone (Jackie's) ####
+
+geom_zone <- function(top = 11/3, bottom = 3/2, linecolor = "black"){
+  geom_rect(xmin = -.7083, xmax = .7083, ymin = bottom, ymax = top,
+            alpha = 0, color = linecolor, linewidth = 0.75)
+}
+
+geom_plate <- function(){
+  df <- data.frame(x = c(-.7083, .7083, .7083 ,0, -.7083), y = c(0, 0, -.25, -.5, -.25))
+  g <- geom_polygon(data = df, aes(x = x, y = y), fill = "white", color = "black", linewidth = 1.25)
+  g
+}
+
+
+
+# Data Exploration ####
+median(data$ff_avg_spin, na.rm = TRUE)
+median(data$sl_avg_spin, na.rm = TRUE)
+median(data$cu_avg_spin, na.rm = TRUE)
+
+# Data Viz ####
+# Color / Shape = Pitch
+strider %>% 
+  ggplot(aes(x = plate_x, y = plate_z)) +
+  geom_segment(x = -8.5/12, y = 18/12, xend = 8.5/12, yend = 18/12,
+               linewidth = 0.5) +
+  geom_segment(x = -8.5/12, y = 44/12, xend = 8.5/12, yend = 44/12,
+               linewidth = 0.5) +
+  geom_segment(x = -8.5/12, y = 18/12, xend = -8.5/12, yend = 44/12,
+               linewidth = 0.5) +
+  geom_segment(x = 8.5/12, y = 18/12, xend = 8.5/12, yend = 44/12,
+               linewidth = 0.5) +
+  geom_plate() +
+  geom_point(aes(shape = pitch_type, color = pitch_type), alpha = 0.85) + 
+  coord_fixed() +
+  labs(color = "Pitch",
+       shape = "Pitch",
+       title = "Spencer Strider",
+       subtitle = "Sep. 13, 2023 vs. PHI",
+       caption = "Data from Baseball Savant") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank())
+
+
+# Color = Speed / Shape = Pitch
+strider %>% 
+  mutate(type = str_replace(type, "B", "Ball"),
+         type = str_replace(type, "S", "Strike"),
+         type = str_replace(type, "X", "In Play")) %>% 
+  ggplot(aes(x = -plate_x, y = plate_z)) +
+  geom_segment(x = -8.5/12, y = 18/12, xend = 8.5/12, yend = 18/12,
+               linewidth = 0.5) +
+  geom_segment(x = -8.5/12, y = 44/12, xend = 8.5/12, yend = 44/12,
+               linewidth = 0.5) +
+  geom_segment(x = -8.5/12, y = 18/12, xend = -8.5/12, yend = 44/12,
+               linewidth = 0.5) +
+  geom_segment(x = 8.5/12, y = 18/12, xend = 8.5/12, yend = 44/12,
+               linewidth = 0.5) +
+  geom_point(aes(color = pitch_type, shape = type, size = type), alpha = 0.85) + 
+  scale_shape_manual(values = c(1, 4, 18)) +
+  scale_size_manual(values = c(1, 1, 2)) +
+  coord_fixed() +
+  labs(color = "Pitch",
+       size = "Result",
+       shape = "Result",
+       title = "Spencer Strider",
+       subtitle = "Sep. 13, 2023 vs. PHI",
+       caption = "Data from Baseball Savant") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank())
+
+
+strider %>% 
+  ggplot(aes(x = -pfx_x*12, y = pfx_z*12)) +
+  geom_vline(xintercept = 0, linewidth = 0.5) +
+  geom_hline(yintercept = 0, linewidth= 0.5) +
+  geom_point(aes(shape = pitch_type, color = pitch_type), alpha = 0.85) + 
+  coord_fixed() +
+  labs(x = "Induced Horizontal Movement",
+       y = "Induced Vertical Movement",
+       color = "Pitch",
+       shape = "Pitch",
+       title = "Spencer Strider",
+       subtitle = "Sep. 13, 2023 vs. PHI",
+       caption = "Data from Baseball Savant") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank())
+
+
+strider %>% 
+  ggplot(aes(x = -plate_x, y = plate_z, color = pitch_type)) +
+  geom_zone() +
+  geom_mark_hull(expand = unit(2, "mm"), size = .8, show.legend = FALSE) +
+  geom_point(alpha = 0.5) +
+  coord_fixed(ratio = 1) +
+  labs(title = "Spencer Strider", 
+       subtitle = "ATL @ PHI - September 13, 2023",
+       x = "Horizontal Position", y = "Vertical Position", 
+       color = "Release Speed") +
+  theme_bw() +
+  facet_wrap(~pitch_type, nrow = 2)
+
+
+strider %>% 
+  ggplot(aes(x = spin_axis, y = 1)) +
+  geom_point(aes(color = pitch_type), alpha = 0.25) +
+  # geom_jitter(aes(color = pitch_type), width = 0, height = 0.0001) +
+  coord_polar(start = pi) +
+  labs(color = "Pitch",
+       title = "Spencer Strider Spin Direction",
+       subtitle = "ATL @ PHI - September 13, 2023") +
+  scale_x_continuous(breaks = seq(0, 360, 60), limits = c(0, 360)) +
+  theme(panel.grid.minor = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()) +
+  NULL
+
+strider %>% 
+  filter(pitch_type == "SL") %>% 
+  ggplot(aes(x = spin_axis, y = pfx_z)) +
+  geom_point(aes(color = pitch_type), alpha = 0.75) +
+  labs(color = "Pitch",
+       title = "Spencer Strider Spin Direction",
+       subtitle = "ATL @ PHI - September 13, 2023") +
+  geom_smooth(se = FALSE) +
+  NULL

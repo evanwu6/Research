@@ -1,0 +1,475 @@
+---
+title: "Week 1"
+author: "Evan Wu"
+output: 
+  html_document:
+    code_folding:
+      hide
+---
+
+<br>
+
+#### Code Background
+
+Looking at whiff data for left-handed pitchers (35 pitchers from 2022, all with
+1842+ seasonal pitches). 
+
+<br>
+
+#### Libraries
+```{r Libraries, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(knitr)
+library(glmnet)
+library(patchwork)
+```
+
+
+``` {r Functions, }
+# Geom Zone (Jackie's) ####
+
+geom_zone <- function(top = 11/3, bottom = 3/2, linecolor = "black"){
+  geom_rect(xmin = -.7083, xmax = .7083, ymin = bottom, ymax = top,
+            alpha = 0, color = linecolor, linewidth = 0.75)
+}
+
+# c(0, 0, -.25, -.5, -.25))
+
+geom_plate <- function(pov = "pitcher"){
+   df <- case_when(
+     pov == "pitcher" ~ 
+       data.frame(x = c(-.7083, .7083, .7083 ,0, -.7083), y = c(0, 0, .25, .5, .25)),
+     pov == "catcher" ~ 
+       data.frame(x = c(-.7083, .7083, .7083 ,0, -.7083), y = c(0, 0, -.25, -.5, -.25))
+   )
+  
+   g <- geom_polygon(data = df, aes(x = x, y = y), fill = "white", color = "black", linewidth = 1.25)
+  g
+}
+```
+
+#### Data
+```{r Data, message = FALSE, warning = FALSE}
+
+all <- read_csv("CSVs/all_pitches.csv") %>% 
+  select(-...1) %>% 
+  mutate(distance_sweet = sqrt(((plate_x - 0.85)^2)+((plate_z - 1.55)^2)))
+
+sliders <- all %>% 
+  filter(p_throws == "R",
+         hitter == "R") %>% 
+  filter(pitch_type == "SL") %>% 
+  mutate(count = paste0(balls, "_", strikes))
+
+fastballs <- all %>% 
+  filter(p_throws == "R",
+         hitter == "R") %>% 
+  filter(pitch_type == "FF") %>% 
+  mutate(count = paste0(balls, "_", strikes))
+
+```
+
+```{r Slider Model, message = FALSE}
+# Initial Model
+sl_model_all <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
+              balls + strikes + pfx_total + speed_change + break_change + distance,
+              data = sliders, family = binomial)
+
+# Model Evaluation
+summary(sl_model_all)
+
+sl_model <- glm(whiff ~ pfx_x + pfx_z + plate_x + plate_z + zone +
+              balls + pfx_total + speed_change + break_change + distance,
+              data = sliders, family = binomial)
+
+# Model Predictions
+sl_preds <- sliders %>% 
+  mutate(prediction_log = predict(sl_model, sliders),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction))
+
+sl_preds %>% 
+  mutate(prediction = round(prediction, 2)) %>% 
+  group_by(prediction) %>% 
+  summarize(n = n(), whiff_rate = mean(whiff)) %>% 
+  as.data.frame() %>% 
+  ggplot(aes(x = prediction, y = whiff_rate)) +
+  geom_point(aes(size = n)) + # size of bin shown on graph
+  coord_fixed() +
+  geom_smooth(se = FALSE) +
+  labs(y = "observed whiff proportion",
+       x = "projected % whiff chance",
+       title = "Slider Whiff Model Prediction",
+       subtitle = "Whiff proportion by predicted whiff value",
+       caption = "Whiff predictions have a 1% bin width")
+```
+
+
+```{r Slider Model by Count, include = FALSE, }
+## 0 Strikes
+# Initial Model
+sl_model0_all <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
+              balls + pfx_total + speed_change + break_change + distance,
+              data = filter(sliders, strikes == 0), family = binomial)
+
+# Model Evaluation
+summary(sl_model0_all)
+
+sl_model0 <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
+              balls + pfx_total + distance,
+              data = filter(sliders, strikes == 0), family = binomial)
+
+# Model Predictions
+sl_preds0 <- sliders %>% 
+  filter(strikes == 0) %>% 
+  mutate(prediction_log = predict(sl_model0, filter(sliders, strikes == 0)),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction))
+
+sl0 <- sl_preds0 %>% 
+  mutate(prediction = round(prediction, 2)) %>% 
+  group_by(prediction) %>% 
+  summarize(mean(whiff)) %>% 
+  as.data.frame() %>% 
+  ggplot(aes(x = prediction, y = `mean(whiff)`)) +
+  geom_point() +
+  coord_fixed() +
+  geom_smooth(se = FALSE) +
+  labs(y = "observed whiff proportion",
+       x = "projected % whiff chance",
+       title = "0 Strike Slider Whiff Model Prediction",
+       caption = "Variables: pitch_speed, pfx_x, pfx_z, 
+       plate_x, plate_z, zone,
+       balls, pfx_total, distance")
+
+
+## 1 Strike
+# Initial Model
+sl_model1_all <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
+              balls + pfx_total + speed_change + break_change + distance,
+              data = filter(sliders, strikes == 1), family = binomial)
+
+# Model Evaluation
+summary(sl_model1_all)
+
+sl_model1 <- glm(whiff ~ pfx_x + plate_x + plate_z + zone +
+              pfx_total + break_change + distance,
+              data = filter(sliders, strikes == 1), family = binomial)
+
+# Model Predictions
+sl_preds1 <- sliders %>% 
+  filter(strikes == 1) %>% 
+  mutate(prediction_log = predict(sl_model1, filter(sliders, strikes == 1)),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction))
+
+sl1 <- sl_preds1 %>% 
+  mutate(prediction = round(prediction, 2)) %>% 
+  group_by(prediction) %>% 
+  summarize(mean(whiff)) %>% 
+  as.data.frame() %>% 
+  ggplot(aes(x = prediction, y = `mean(whiff)`)) +
+  geom_point() +
+  coord_fixed() +
+  geom_smooth(se = FALSE) +
+  labs(y = "observed whiff proportion",
+       x = "projected % whiff chance",
+       title = "1 Strike Slider Whiff Model Prediction",
+       caption = "Variables: pfx_x, plate_x, 
+       plate_z, zone, pfx_total, 
+       break_change, distance")
+
+
+
+## 2 Strike
+# Initial Model
+sl_model2_all <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
+              balls + pfx_total + speed_change + break_change + distance,
+              data = filter(sliders, strikes == 2), family = binomial)
+
+# Model Evaluation
+summary(sl_model2_all)
+
+sl_model2 <- glm(whiff ~ plate_x + plate_z + zone +
+              balls + distance,
+              data = filter(sliders, strikes == 2), family = binomial)
+
+# Model Predictions
+sl_preds2 <- sliders %>% 
+  filter(strikes == 2) %>% 
+  mutate(prediction_log = predict(sl_model2, filter(sliders, strikes == 2)),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction))
+
+sl2 <- sl_preds2 %>% 
+  mutate(prediction = round(prediction, 2)) %>% 
+  group_by(prediction) %>% 
+  summarize(mean(whiff)) %>% 
+  as.data.frame() %>% 
+  ggplot(aes(x = prediction, y = `mean(whiff)`)) +
+  geom_point() +
+  coord_fixed() +
+  geom_smooth(se = FALSE) +
+  labs(y = "observed whiff proportion",
+       x = "projected % whiff chance",
+       title = "2 Strike Slider Whiff Model Prediction",
+       caption = "Variables: plate_x, plate_z,
+       zone, balls, distance")
+```
+
+```{r Slider Model Predictions by Strike}
+sl0 + sl1 + sl2
+```
+
+
+
+```{r 4-Seam Fastball Model, message = FALSE}
+# Initial Model
+ff_model_all <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
+              balls + strikes + pfx_total + speed_change + break_change + distance,
+              data = fastballs, family = binomial)
+
+# Model Evaluation
+summary(ff_model_all)
+
+ff_model <- glm(whiff ~ pitch_speed + pfx_z + plate_x + plate_z + zone +
+              strikes + pfx_total + speed_change + break_change + distance,
+              data = fastballs, family = binomial)
+
+# Model Predictions
+ff_preds <- fastballs %>% 
+  mutate(prediction_log = predict(ff_model, fastballs),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction))
+
+ff_preds %>% 
+  mutate(prediction = round(prediction, 2)) %>% 
+  group_by(prediction) %>% 
+  summarize(mean(whiff)) %>% 
+  as.data.frame() %>% 
+  ggplot(aes(x = prediction, y = `mean(whiff)`)) +
+  geom_point() +
+  coord_fixed() +
+  geom_smooth(se = FALSE) +
+  labs(y = "observed whiff proportion",
+       x = "projected % whiff chance",
+       title = "Fastball Whiff Model Prediction",
+       subtitle = "Whiff proportion by predicted whiff value",
+       caption = "Whiff predictions have a 1% bin width")
+```
+
+```{r Fastballs Model by Count, include = FALSE, }
+## 0 Strikes
+# Initial Model
+ff_model0_all <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
+              balls + pfx_total + speed_change + break_change + distance,
+              data = filter(fastballs, strikes == 0), family = binomial)
+
+# Model Evaluation
+summary(ff_model0_all)
+
+ff_model0 <- glm(whiff ~ pitch_speed + pfx_z + plate_z + zone +
+              pfx_total + speed_change + break_change + distance,
+              data = filter(fastballs, strikes == 0), family = binomial)
+
+# Model Predictions
+ff_preds0 <- fastballs %>% 
+  filter(strikes == 0) %>% 
+  mutate(prediction_log = predict(ff_model0, filter(fastballs, strikes == 0)),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction))
+
+ff0 <- ff_preds0 %>% 
+  mutate(prediction = round(prediction, 2)) %>% 
+  group_by(prediction) %>% 
+  summarize(mean(whiff)) %>% 
+  as.data.frame() %>% 
+  ggplot(aes(x = prediction, y = `mean(whiff)`)) +
+  geom_point() +
+  coord_fixed() +
+  geom_smooth(se = FALSE) +
+  labs(y = "observed whiff proportion",
+       x = "projected % whiff chance",
+       title = "0 Strike Fastball Whiff Model Prediction",
+       caption = "Variables: pitch_speed, pfx_z, plate_z, 
+       zone, pfx_total, speed_change,
+       break_change, distance")
+
+
+## 1 Strike
+# Initial Model
+ff_model1_all <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
+              balls + pfx_total + speed_change + break_change + distance,
+              data = filter(fastballs, strikes == 1), family = binomial)
+
+# Model Evaluation
+summary(ff_model1_all)
+
+ff_model1 <- glm(whiff ~ pitch_speed + pfx_z + plate_z + zone +
+              pfx_total + speed_change + break_change + distance,
+              data = filter(fastballs, strikes == 1), family = binomial)
+
+# Model Predictions
+ff_preds1 <- fastballs %>% 
+  filter(strikes == 1) %>% 
+  mutate(prediction_log = predict(ff_model1, filter(fastballs, strikes == 1)),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction))
+
+ff1 <- ff_preds1 %>% 
+  mutate(prediction = round(prediction, 2)) %>% 
+  group_by(prediction) %>% 
+  summarize(mean(whiff)) %>% 
+  as.data.frame() %>% 
+  ggplot(aes(x = prediction, y = `mean(whiff)`)) +
+  geom_point() +
+  coord_fixed() +
+  geom_smooth(se = FALSE) +
+  labs(y = "observed whiff proportion",
+       x = "projected % whiff chance",
+       title = "1 Strike Fastball Whiff Model Prediction",
+       caption = "Variables: pitch_speed, pfx_z, plate_z, 
+       zone, pfx_total, speed_change,
+       break_change, distance")
+
+
+## 2 Strikes
+# Initial Model
+ff_model2_all <- glm(whiff ~ pitch_speed + pfx_x + pfx_z + plate_x + plate_z + zone +
+              balls + pfx_total + speed_change + break_change + distance,
+              data = filter(fastballs, strikes == 2), family = binomial)
+
+# Model Evaluation
+summary(ff_model2_all)
+
+ff_model2 <- glm(whiff ~ pitch_speed + pfx_z + plate_x + plate_z + zone +
+              pfx_total + break_change + distance,
+              data = filter(fastballs, strikes == 2), family = binomial)
+
+# Model Predictions
+ff_preds2 <- fastballs %>% 
+  filter(strikes == 2) %>% 
+  mutate(prediction_log = predict(ff_model2, filter(fastballs, strikes == 2)),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction))
+
+ff2 <- ff_preds2 %>% 
+  mutate(prediction = round(prediction, 2)) %>% 
+  group_by(prediction) %>% 
+  summarize(mean(whiff)) %>% 
+  as.data.frame() %>% 
+  ggplot(aes(x = prediction, y = `mean(whiff)`)) +
+  geom_point() +
+  coord_fixed() +
+  geom_smooth(se = FALSE) +
+  labs(y = "observed whiff proportion",
+       x = "projected % whiff chance",
+       title = "2 Strikes Fastball Whiff Model Prediction",
+       caption = "Variables: pitch_speed, pfx_z, 
+       plate_x, plate_z, zone, 
+       pfx_total, break_change, 
+       distance")
+```
+
+```{r Fastball Model Predictions by Strike}
+ff0 + ff1 + ff2
+```
+
+```{r Models with Sweet Spot}
+## Sliders
+# Model
+sl_model_s <- glm(whiff ~ pfx_x + pfx_z + plate_x + plate_z + zone +
+              balls + pfx_total + speed_change + break_change + distance + distance_sweet,
+              data = sliders, family = binomial)
+
+summary(sl_model_s)
+
+# Model Predictions
+sl_preds_s <- sliders %>% 
+  mutate(prediction_log = predict(sl_model_s, sliders),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction))
+
+sl_preds_s %>% 
+  mutate(prediction = round(prediction, 2)) %>% 
+  group_by(prediction) %>% 
+  summarize(mean(whiff)) %>% 
+  as.data.frame() %>% 
+  ggplot(aes(x = prediction, y = `mean(whiff)`)) +
+  geom_point() +
+  coord_fixed() +
+  geom_smooth(se = FALSE) +
+  labs(y = "observed whiff proportion",
+       x = "projected % whiff chance",
+       title = "Slider Whiff Model Prediction (w/ Sweet)")
+
+
+
+
+## Fastball
+# Model
+ff_model_s <- glm(whiff ~ pitch_speed + pfx_z + plate_x + plate_z + zone +
+              strikes + pfx_total + speed_change + break_change + distance + distance_sweet,
+              data = fastballs, family = binomial)
+
+summary(ff_model_s)
+
+# Model Predictions
+ff_preds_s <- fastballs %>% 
+  mutate(prediction_log = predict(ff_model_s, fastballs),
+         prediction = 1 / (1 + exp(-prediction_log)),
+         rounded_pred = case_when(
+           prediction >= 0.5 ~ 1,
+           prediction < 0.5 ~ 0
+         )) %>% 
+  filter(!is.na(prediction))
+
+ff_preds_s %>% 
+  mutate(prediction = round(prediction, 2)) %>% 
+  group_by(prediction) %>% 
+  summarize(mean(whiff)) %>% 
+  as.data.frame() %>% 
+  ggplot(aes(x = prediction, y = `mean(whiff)`)) +
+  geom_point() +
+  coord_fixed() +
+  geom_smooth(se = FALSE) +
+  labs(y = "observed whiff proportion",
+       x = "projected % whiff chance",
+       title = "Fastball Whiff Model Prediction (w/ Sweet)")
+```

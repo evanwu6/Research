@@ -1,0 +1,203 @@
+---
+title: "EDA Week 2"
+author: "Evan Wu"
+date: "September 7th, 2023"
+output: html_document
+---
+
+```{r Setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Libraries, echo = FALSE, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(Lahman)
+library(knitr)
+library(kableExtra)
+library(readxl)
+library(ranger)
+library(patchwork)
+library(rpart)
+library(gridExtra)
+```
+
+```{r Data, , echo = FALSE, message = FALSE, warning = FALSE}
+pitch_movement <- read_csv("pitch_movement.csv")
+pitch_arsenal_stats <- read_csv("pitch-arsenal-stats.csv") %>% 
+  filter(pitches >= 50)
+
+pitch_arsenal_add <- pitch_arsenal_stats %>% 
+  select(-last_name, -first_name, -team_name_alt, -pitch_name, -pitches)
+
+data <- pitch_movement %>% 
+  left_join(pitch_arsenal_add, by = c('pitcher_id' = 'player_id', 'pitch_type')) %>% 
+  filter(!is.na(ba)) %>% 
+  rename(pitch_name = pitch_type_name,
+         rv100 = run_value_per_100,
+         xwoba = est_woba)
+
+game_test <- read_xlsx("PHI PIT 09_06_23.xlsx", sheet = "Filtered") %>% 
+  filter(!is.na(Pitcher)) %>% 
+  rename(ovr_pitch_num = `Game Pitch #`)
+```
+
+
+```{r Count Variables, echo = FALSE, eval = FALSE}
+game_test <- game_test %>% 
+  mutate(Balls = if())
+```
+
+
+<br>
+
+```{r Pitch Values, echo = FALSE, warning = FALSE}
+# Pitch Average Table
+data %>% 
+  select(pitch_hand:pitches_thrown, pitch_type, pitch_name, 
+         pitcher_break_z, pitcher_break_x, rv100:hard_hit_percent) %>% 
+  mutate(Pitch = pitch_name) %>% 
+  group_by(Pitch) %>% 
+  summarize("Vert. Move." = round(mean(pitcher_break_z), 1),
+            "Hor. Move."  = round(mean(pitcher_break_x), 1),
+            wOBA = mean(woba), xwOBA = mean(xwoba), 
+            "Whiff %" = paste0(round(mean(whiff_percent), 1), "%"),
+            "Hard Hit %" = paste0(round(mean(hard_hit_percent), 1), "%")) %>% 
+  kable(digits = 3, caption = "Averages per Pitch") %>% 
+  kable_styling(full_width = T)
+```
+
+<br>
+
+```{r Pitch Results, echo = FALSE, warning = FALSE}
+# Pitch wOBA
+data %>% 
+  ggplot(aes(x = pitch_name, y = woba, fill = pitch_name)) +
+  geom_boxplot(show.legend = FALSE) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  labs(title = "wOBA by Pitch Type",
+       subtitle = "2022 Data - 50 or more pitches",
+       x = "Pitch",
+       y = "wOBA") +
+  scale_y_continuous(labels = scales::number_format(accuracy = 0.001))
+
+data %>% 
+  ggplot(aes(x = pitch_name, y = woba, color = pitch_name)) +
+  geom_jitter(alpha = 0.2, width = 0.15, show.legend = FALSE) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  labs(title = "wOBA by Pitch Type",
+       subtitle = "2022 Data - 50 or more pitches",
+       x = "Pitch",
+       y = "wOBA") +
+  scale_y_continuous(labels = scales::number_format(accuracy = 0.001))
+
+
+
+# Pitch Whiff Rate
+data %>% 
+  mutate(whiff_percent = whiff_percent/100) %>% 
+  ggplot(aes(x = pitch_name, y = whiff_percent, fill = pitch_name)) +
+  geom_boxplot(show.legend = FALSE) +
+  theme_classic() +
+  scale_y_continuous(labels = scales::percent) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  labs(title = "Whiff Rate by Pitch Type",
+       subtitle = "2022 Data - 50 or more pitches",
+       x = "Pitch",
+       y = "Whiff Rate")
+
+data %>% 
+  mutate(whiff_percent = whiff_percent/100) %>% 
+  ggplot(aes(x = pitch_name, y = whiff_percent, color = pitch_name)) +
+  geom_jitter(alpha = 0.2, width = 0.15, show.legend = FALSE) +
+  theme_classic() +
+  scale_y_continuous(labels = scales::percent) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  labs(title = "Whiff Rate by Pitch Type",
+       subtitle = "2022 Data - 50 or more pitches",
+       x = "Pitch",
+       y = "Whiff Rate")
+  
+```
+
+<br>
+
+```{r Pitch Data - Movement and Outcomes, echo = FALSE, warning = FALSE, message = FALSE}
+
+# Movement and Pitches
+data %>% 
+  ggplot(aes(x = pitcher_break_x, y = pitcher_break_z, color = pitch_name)) +
+  geom_vline(xintercept = 0, color = "black", alpha = 0.85, linetype = 2) +
+  geom_hline(yintercept = 0, color = "black", alpha = 0.85, linetype = 2) +
+  geom_point(alpha = 0.7) +
+  theme_classic() +
+  labs(title = "Pitch Movement by Pitch Type",
+       subtitle = "2022 Season Averages",
+       x = "Horizontal Break (In.)",
+       y = "Vertical Break (In.)")
+
+# GG Highlight
+library(gghighlight)
+data %>% 
+  ggplot(aes(x = pitcher_break_x, y = pitcher_break_z, color = pitch_name)) +
+  geom_point(alpha = 0.4) +
+  gghighlight() +
+  facet_wrap(~ fct_reorder(pitch_name, avg_speed, .desc = TRUE), dir = "v") +
+  theme_bw() +
+  labs(title = "Pitch Movement by Pitch Type",
+       subtitle = "2022 Season Averages",
+       x = "Horizontal Break (In.)",
+       y = "Vertical Break (In.)") # change labels
+
+# dir = "v" changes the wrap-fill from side-side to up-down
+
+
+game_test %>% 
+  ggplot(aes(x = `HBreak (In.)`, y = `VBreak (In.)`, color = `Pitch Type`)) +
+  geom_vline(xintercept = 0, color = "black", alpha = 0.85, linetype = 2) +
+  geom_hline(yintercept = 0, color = "black", alpha = 0.85, linetype = 2) +
+  geom_point(shape = 18, size = 2) +
+  theme_classic() +
+  labs(title = "Pitch Movement by Pitch Type",
+       subtitle = "Phillies vs. Pirates - September 6, 2023",
+       x = "Horizontal Break (In.)",
+       y = "Vertical Break (In.)")
+
+# Outcomes
+game_test %>% 
+  ggplot(aes(y = Result, fill = Result)) +
+  geom_bar(show.legend = FALSE) +
+  theme_classic() +
+  labs(title = "Phillies vs. Pirates Game Outcome Distribution",
+       x = "Count")
+```
+
+<br>
+
+
+```{r Pitch Data - Speed and Spin, echo = FALSE, warning = FALSE}
+
+# Speed/Spin and Pitches
+game_test %>% 
+  ggplot(aes(x = `Spin (RPM)`, y = `Pitch Vel (MPH)`, color = `Pitch Type`)) +
+  geom_jitter(alpha = 0.65, width = 0.15) +
+  theme_classic() +
+  labs(x = "Spin Rate (RPM)",
+       y = "Pitch Speed (MPH)",
+       title = "Spin vs. Speed")
+
+game_test %>% 
+  filter(Pitcher == "Zack Wheeler") %>% 
+  ggplot(aes(x = `Spin (RPM)`, y = `Pitch Vel (MPH)`, color = `Pitch Type`)) +
+  geom_jitter(alpha = 0.8, width = 0.15) +
+  theme_classic() +
+  labs(x = "Spin Rate (RPM)",
+       y = "Pitch Speed (MPH)",
+       title = "Zack Wheeler - Spin vs. Speed")
+```
+

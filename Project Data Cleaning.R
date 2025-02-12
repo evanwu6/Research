@@ -56,3 +56,4 @@ pitchers <- pitchers %>%
 # Writing CSV
 write.csv(pitchers, "CSVs/pitcher_comps.csv", row.names = FALSE)
 
+

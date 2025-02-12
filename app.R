@@ -14,8 +14,7 @@ movement <- read_csv("Movement.csv") %>%
   filter(min_spin != "Inf", 
          !is.na(pitch_speed))
 
-comp_data <- read_csv("CSVs/pitcher_comps.csv") %>% 
-  select(-...1) %>% 
+comp_data <- read_csv("CSVs/Pitcher_App_Comps.csv") %>% 
   mutate(`X Movement` = round(`X Movement`*12, 2),
          `Z Movement` = round(`Z Movement`*12, 2),
          `Spin Rate` = round(`Spin Rate`, 0),
