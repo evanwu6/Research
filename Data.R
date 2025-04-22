@@ -15,6 +15,16 @@ is.barrel <- function(LA, EV){
   outcome
 }
 
+# Name Function ####
+swap_names <- function(name) {
+  parts <- strsplit(name, ", ")[[1]]
+  if (length(parts) == 2) {
+    return(paste(rev(parts), collapse = " "))
+  } else {
+    return(name)
+  }
+}
+
 # 2022 Seasonal Data ####
 
 # Overall Numbers for Pitchers
@@ -371,7 +381,8 @@ pitchers2 <- pitchers2 %>%
   mutate(speed_fb_diff = pitch_speed - speed,
          pfx_x_fb_diff = pfx_x - horz,
          pfx_z_fb_diff = pfx_z - ivb) %>% 
-  select(-speed, -horz, -ivb)
+  select(-speed, -horz, -ivb) %>% 
+  mutate(zone = as.character(zone))
   
 
 
@@ -477,7 +488,8 @@ pitchers3 <- pitchers3 %>%
   mutate(speed_fb_diff = pitch_speed - speed,
          pfx_x_fb_diff = pfx_x - horz,
          pfx_z_fb_diff = pfx_z - ivb) %>% 
-  select(-speed, -horz, -ivb)
+  select(-speed, -horz, -ivb) %>% 
+  mutate(zone = as.character(zone))
 
 
 
@@ -492,7 +504,9 @@ pitchers4 <- rbind(pitchers2, pitchers3) %>%
   mutate(is_strike = ifelse(description  %in% c("called_strike", "swinging_strike",
                                                 "foul_tip", "bunt_foul_tip", "foul_bunt",
                                                 "swinging_strike_blocked", "missed_bunt"),
-                            1, 0))
+                            1, 0)) %>% 
+  mutate(is_benefit = ifelse(run_exp_added > 0, 1, 0)) %>% 
+  mutate(zone = as.character(zone))
 
 
 # Batter Data
@@ -539,12 +553,8 @@ swap_names <- function(name) {
 
 
 comps <- full_data %>% 
-  mutate(is_strike = ifelse(description %in% c("hit_into_play", "foul", "called_strike",
-                                               "swinging_strike", "swinging_strike_blocked", 
-                                               "foul_tip", "foul_bunt", "missed_bunt",
-                                               "bunt_foul_tip"), 1, 0),
+  mutate(is_benefit = ifelse(run_exp_added > 0, 1, 0),
          is_barrel = is.barrel(launch_angle, launch_speed),
-         is_good = run_exp_added > 0,
          player_name = sapply(player_name, swap_names)) %>% 
   group_by(player_name, pitch_type, p_throws, hitter) %>% 
   summarize(Pitches = n(),
@@ -553,9 +563,8 @@ comps <- full_data %>%
             "X Movement" = mean(pfx_x, na.rm = TRUE),
             "Z Movement" = mean(pfx_z, na.rm = TRUE),
             "Whiff Prop" = mean(whiff, na.rm = TRUE),
-            "Strike Prop" = mean(is_strike, na.rm = TRUE), 
-            "Barrel Prop" = mean(is_barrel, na.rm = TRUE),
-            "Good Outcome Prop" = mean(is_good, na.rm = TRUE)) %>% 
+            "Benefit Prop" = mean(is_benefit, na.rm = TRUE), 
+            "Barrel Prop" = mean(is_barrel, na.rm = TRUE)) %>% 
   rename(Name = player_name) %>% 
   filter(Pitches >= 100)
 
@@ -570,7 +579,7 @@ batter_stats <- rhp %>%
   summarize(rate = mean(whiff),
             pitches = n(),
             .by = c(batter, pitch_type)) %>% 
-  mutate(pitch_whiff = weighted.mean(rate, pitches),
+  mutate(pitch_whiff = weighted.mean(rate, pitches, na.rm = TRUE),
          .by = pitch_type) %>% 
   mutate(pred_bwhiff = (pitches / 300)*rate + ((300-pitches)/300)*pitch_whiff) %>% 
   mutate(pred_bwhiff = ifelse(pitches >= 300, rate, pred_bwhiff))
@@ -601,7 +610,7 @@ batter_stats2 <- rhp %>%
   summarize(rate = mean(is_barrel),
             pitches = n(),
             .by = c(batter, pitch_type)) %>% 
-  mutate(pitch_barrel = weighted.mean(rate, pitches),
+  mutate(pitch_barrel = weighted.mean(rate, pitches, na.rm = TRUE),
          .by = pitch_type) %>% 
   mutate(pred_bbarrel = (pitches / 300)*rate + ((300-pitches)/300)*pitch_barrel) %>% 
   mutate(pred_bbarrel = ifelse(pitches >= 300, rate, pred_bbarrel))
@@ -611,18 +620,18 @@ rhp <- rhp %>%
             by = c("batter" = "batter", "pitch_type" = "pitch_type"))
 
 
-# Strike
+# Benefit
 batter_stats3 <- rhp %>% 
-  summarize(rate = mean(is_strike),
+  summarize(rate = mean(is_benefit),
             pitches = n(),
             .by = c(batter, pitch_type)) %>% 
-  mutate(pitch_strike = weighted.mean(rate, pitches),
+  mutate(pitch_benefit = weighted.mean(rate, pitches, na.rm = TRUE),
          .by = pitch_type) %>% 
-  mutate(pred_bstrike = (pitches / 300)*rate + ((300-pitches)/300)*pitch_strike) %>% 
-  mutate(pred_bstrike = ifelse(pitches >= 300, rate, pred_bstrike))
+  mutate(pred_bbenefit = (pitches / 300)*rate + ((300-pitches)/300)*pitch_benefit) %>% 
+  mutate(pred_benefit = ifelse(pitches >= 300, rate, pred_bbenefit))
 
 rhp <- rhp %>% 
-  left_join(select(batter_stats3, batter, pitch_type, pred_bstrike), 
+  left_join(select(batter_stats3, batter, pitch_type, pred_bbenefit), 
             by = c("batter" = "batter", "pitch_type" = "pitch_type"))
 
 
@@ -649,7 +658,7 @@ batter_stats_l <- lhp %>%
   summarize(rate = mean(whiff),
             pitches = n(),
             .by = c(batter, pitch_type)) %>% 
-  mutate(pitch_whiff = weighted.mean(rate, pitches),
+  mutate(pitch_whiff = weighted.mean(rate, pitches, na.rm = TRUE),
          .by = pitch_type) %>% 
   mutate(pred_bwhiff = (pitches / 300)*rate + ((300-pitches)/300)*pitch_whiff) %>% 
   mutate(pred_bwhiff = ifelse(pitches >= 300, rate, pred_bwhiff))
@@ -680,7 +689,7 @@ batter_stats2_l <- lhp %>%
   summarize(rate = mean(is_barrel),
             pitches = n(),
             .by = c(batter, pitch_type)) %>% 
-  mutate(pitch_barrel = weighted.mean(rate, pitches),
+  mutate(pitch_barrel = weighted.mean(rate, pitches, na.rm = TRUE),
          .by = pitch_type) %>% 
   mutate(pred_bbarrel = (pitches / 300)*rate + ((300-pitches)/300)*pitch_barrel) %>% 
   mutate(pred_bbarrel = ifelse(pitches >= 300, rate, pred_bbarrel))
@@ -690,54 +699,76 @@ lhp <- lhp %>%
             by = c("batter" = "batter", "pitch_type" = "pitch_type"))
 
 
-# Strike
+# Benefit
 batter_stats3_l <- lhp %>% 
-  summarize(rate = mean(is_strike),
+  summarize(rate = mean(is_benefit),
             pitches = n(),
             .by = c(batter, pitch_type)) %>% 
-  mutate(pitch_strike = weighted.mean(rate, pitches),
+  mutate(pitch_benefit = weighted.mean(rate, pitches, na.rm = TRUE),
          .by = pitch_type) %>% 
-  mutate(pred_bstrike = (pitches / 300)*rate + ((300-pitches)/300)*pitch_strike) %>% 
-  mutate(pred_bstrike = ifelse(pitches >= 300, rate, pred_bstrike))
+  mutate(pred_bbenefit = (pitches / 300)*rate + ((300-pitches)/300)*pitch_benefit) %>% 
+  mutate(pred_bbenefit = ifelse(pitches >= 300, rate, pred_bbenefit))
 
 lhp <- lhp %>% 
-  left_join(select(batter_stats3_l, batter, pitch_type, pred_bstrike), 
+  left_join(select(batter_stats3_l, batter, pitch_type, pred_bbenefit), 
             by = c("batter" = "batter", "pitch_type" = "pitch_type"))
 
 
 batter_preds_r <- batter_stats %>% 
   left_join(batter_stats2, by = c("batter", "pitch_type")) %>% 
   left_join(batter_stats3, by = c("batter", "pitch_type")) %>% 
-  select(batter, pitch_type, pitches, pred_bwhiff, pred_bbarrel, pred_bstrike) %>% 
-  mutate(hitter = "R")
+  select(batter, pitch_type, pitches, pred_bwhiff, pred_bbarrel, pred_bbenefit) %>% 
+  mutate(p_throws = "R")
 
 batter_preds_l <- batter_stats_l %>% 
   left_join(batter_stats2_l, by = c("batter", "pitch_type")) %>% 
   left_join(batter_stats3_l, by = c("batter", "pitch_type")) %>% 
-  select(batter, pitch_type, pitches, pred_bwhiff, pred_bbarrel, pred_bstrike) %>% 
-  mutate(hitter = "L")
+  select(batter, pitch_type, pitches, pred_bwhiff, pred_bbarrel, pred_bbenefit) %>% 
+  mutate(p_throws = "L")
+
+batter_hands <- full_data %>% 
+  select(batter, p_throws, hitter) %>%
+  mutate(bh = paste0(batter, hitter)) %>% 
+  distinct(bh, .keep_all = TRUE) %>% 
+  select(-bh)
 
 pred_means <- rbind(batter_preds_r, batter_preds_l) %>% 
-  group_by(hitter, pitch_type) %>% 
+  left_join(batter_hands, by = c("p_throws", "batter")) %>% 
+  filter(!is.na(hitter)) %>% 
+  group_by(p_throws, hitter, pitch_type) %>% 
   summarize(whiff_mean = weighted.mean(pred_bwhiff, pitches, na.rm = TRUE),
             barrel_mean = weighted.mean(pred_bbarrel, pitches, na.rm = TRUE),
-            strike_mean = weighted.mean(pred_bstrike, pitches, na.rm = TRUE))
+            benefit_mean = weighted.mean(pred_bbenefit, pitches, na.rm = TRUE))
+
+
+
+# Combine Models ####
+models_rhp <- read_csv("models_rhp.csv") %>% 
+  mutate(PHand = "R")
+models_lhp <- read_csv("models_lhp.csv") %>% 
+  mutate(PHand  = "L")
+
+models_final <- rbind(models_rhp, models_lhp)
+
 
 
 # Zone Data ####
 
-models <- read_csv("models4.csv") %>% 
+# RHP
+
+models <- read_csv("models_final.csv") %>% 
+  filter(PHand == "R") %>% 
   mutate(Pitch = str_replace(Pitch, "FF", "fastball"),
          Pitch = str_replace(Pitch, "SL", "slider"),
          Pitch = str_replace(Pitch, "CU", "curveball"),
-         Pitch = str_replace(Pitch, "CH", "changeup")) %>% 
+         Pitch = str_replace(Pitch, "CH", "changeup"),
+         Pitch = str_replace(Pitch, "FC", "cutter"),
+         Pitch = str_replace(Pitch, "SI", "sinker"),
+         Pitch = str_replace(Pitch, "FS", "splitter")) %>% 
   mutate(Hand = ifelse(BHand == "R", "right", "left")) %>% 
-  mutate(Response = case_when(Response == "STRIKE" ~ "strike",
-                              Response == "Barrel" ~ "barrel",
-                              Response == "whiff" ~ "whiff")) %>% 
   mutate(term = case_when(term == "pred" & Response == "whiff" ~ "pred_bwhiff",
                           term == "pred" & Response == "barrel" ~ "pred_bbarrel",
-                          term == "pred" & Response == "strike" ~ "pred_bstrike",
+                          term == "pred" & Response == "benefit" ~ "pred_bbenefit",
                           TRUE ~ term))
 
 zones <- models %>%
@@ -747,15 +778,15 @@ zones <- models %>%
 
 zone_data <- data.frame(x = seq(-2, 2, .1),
                         z = seq(-2.5, 1.5, .1),
-                        response = rep(c("whiff", "strike", "barrel"), length.out = 41),
+                        response = rep(c("whiff", "benefit", "barrel"), length.out = 41),
                         hand = rep(c("right", "left"), length.out = 41),
-                        pitch = rep(c("fastball", "slider", "curveball", "changeup"), length.out = 41)) %>%
-  expand(x, z, response, hand, pitch) %>%
+                        pitch = rep(c("fastball", "slider", "curveball", "changeup", "cutter", "sinker", "splitter"), length.out = 41)) %>%
+  tidyr::expand(x, z, response, hand, pitch) %>%
   mutate(pred = NA)
 
-for(response in c("whiff", "strike", "barrel")) {
+for(response in c("whiff", "benefit", "barrel")) {
   for(hand in c("right", "left")) {
-    for(pitch in c("fastball", "slider", "curveball", "changeup")) {
+    for(pitch in c("fastball", "slider", "curveball", "changeup", "cutter", "sinker", "splitter")) {
       test_data <- filter(models, Hand == hand, Pitch == pitch, Response == response)
       test_x <- pull(filter(test_data, term == "dist_x"), estimate)
       test_x2 <- pull(filter(test_data, term == "I(dist_x^2)"), estimate)
@@ -779,6 +810,210 @@ for(response in c("whiff", "strike", "barrel")) {
 }
 
 
+# LHP
+
+models2 <- read_csv("models_final.csv") %>% 
+  filter(PHand == "L") %>% 
+  mutate(Pitch = str_replace(Pitch, "FF", "fastball"),
+         Pitch = str_replace(Pitch, "SL", "slider"),
+         Pitch = str_replace(Pitch, "CU", "curveball"),
+         Pitch = str_replace(Pitch, "CH", "changeup"),
+         Pitch = str_replace(Pitch, "FC", "cutter"),
+         Pitch = str_replace(Pitch, "SI", "sinker")) %>% 
+  mutate(Hand = ifelse(BHand == "R", "right", "left")) %>% 
+  mutate(term = case_when(term == "pred" & Response == "whiff" ~ "pred_bwhiff",
+                          term == "pred" & Response == "barrel" ~ "pred_bbarrel",
+                          term == "pred" & Response == "benefit" ~ "pred_bbenefit",
+                          TRUE ~ term))
+
+zones2 <- models2 %>%
+  filter(term %in% c("zone1", "zone2", "zone3", "zone4", 
+                     "zone6", "zone7", "zone8", "zone9"))
+
+
+zone_data2 <- data.frame(x = seq(-2, 2, .1),
+                        z = seq(-2.5, 1.5, .1),
+                        response = rep(c("whiff", "benefit", "barrel"), length.out = 41),
+                        hand = rep(c("right", "left"), length.out = 41),
+                        pitch = rep(c("fastball", "slider", "curveball", "changeup", "cutter", "sinker"), length.out = 41)) %>%
+  tidyr::expand(x, z, response, hand, pitch) %>%
+  mutate(pred = NA)
+
+for(response in c("whiff", "benefit", "barrel")) {
+  for(hand in c("right", "left")) {
+    for(pitch in c("fastball", "slider", "curveball", "changeup", "cutter", "sinker", "splitter")) {
+      test_data <- filter(models2, Hand == hand, Pitch == pitch, Response == response)
+      test_x <- pull(filter(test_data, term == "dist_x"), estimate)
+      test_x2 <- pull(filter(test_data, term == "I(dist_x^2)"), estimate)
+      test_z <- pull(filter(test_data, term == "dist_z"), estimate)
+      test_z2 <- pull(filter(test_data, term == "I(dist_z^2)"), estimate)
+      test_prop <- pull(filter(test_data, term == "dist_prop"), estimate)
+      
+      if(is_empty(test_x)) {test_x <- 0}
+      if(is_empty(test_z)) {test_z <- 0}
+      if(is_empty(test_x2)) {test_x2 <- 0}
+      if(is_empty(test_z2)) {test_z2 <- 0}
+      if(is_empty(test_prop)) {test_prop <- 0}
+      # if(!is.null(is.na(test_prop))) {test_prop <- 0}
+      
+      zone_data2[zone_data2$response == response & zone_data2$hand == hand & zone_data2$pitch == pitch,] <- zone_data2[zone_data2$response == response & zone_data2$hand == hand & zone_data2$pitch == pitch,] %>%
+        mutate(pred = x * test_x + z * test_z +
+                 x^2 * test_x2 + z^2 * test_z2 +
+                 sqrt(x^2 + z^2) * test_prop)
+    }
+  }
+}
+
+# Combining Zone Info
+
+zone_data <- zone_data %>% 
+  mutate(phand = "right") %>% 
+  rename(bhand = hand)
+
+zone_data2 <- zone_data2 %>% 
+  mutate(phand = "left") %>% 
+  rename(bhand = hand)
+
+zone_data_full <- rbind(zone_data, zone_data2)
+
+zone_data_full <- zone_data_full %>% 
+  select(x, z, phand, response:pred)
+
+
+
+# Input Restrictions for App ####
+
+movement_2021 <- read_csv("App Comp Data/movement_2021.csv") %>% 
+  rename(pitcher_name = `last_name, first_name`) %>% 
+  select(pitcher_name, pitcher_id, pitch_hand, year, pitch_type, 
+         pitches_thrown, total_pitches, 
+         avg_speed, pitcher_break_x, pitcher_break_z)
+
+movement_2022 <- read_csv("App Comp Data/movement_2022.csv") %>% 
+  rename(pitcher_name = `last_name, first_name`) %>% 
+  select(pitcher_name, pitcher_id, pitch_hand, year, pitch_type, 
+         pitches_thrown, total_pitches, 
+         avg_speed, pitcher_break_x, pitcher_break_z)
+
+movement_2023 <- read_csv("App Comp Data/movement_2023.csv") %>% 
+  rename(pitcher_name = `last_name, first_name`) %>% 
+  select(pitcher_name, pitcher_id, pitch_hand, year, pitch_type, 
+         pitches_thrown, total_pitches, 
+         avg_speed, pitcher_break_x, pitcher_break_z)
+
+
+# Reading in Spin Data ####
+arsenal_2021 <- read_csv("App Comp Data/arsenal_2021.csv") %>% 
+  pivot_longer(cols = ff_avg_spin:sv_avg_spin,
+               names_to = "pitch_type",
+               values_to = "avg_spin") %>% 
+  mutate(pitch_type = substr(pitch_type, 1, 2),
+         pitch_type = toupper(pitch_type)) %>% 
+  filter(!is.na(`avg_spin`)) %>% 
+  rename(pitcher_id = pitcher) %>% 
+  select(-`last_name, first_name`) %>% 
+  mutate(year = 2021)
+
+arsenal_2022 <- read_csv("App Comp Data/arsenal_2022.csv") %>% 
+  pivot_longer(cols = ff_avg_spin:sv_avg_spin,
+               names_to = "pitch_type",
+               values_to = "avg_spin") %>% 
+  mutate(pitch_type = substr(pitch_type, 1, 2),
+         pitch_type = toupper(pitch_type)) %>% 
+  filter(!is.na(`avg_spin`)) %>% 
+  rename(pitcher_id = pitcher) %>% 
+  select(-`last_name, first_name`) %>% 
+  mutate(year = 2022)
+
+arsenal_2023 <- read_csv("App Comp Data/arsenal_2023.csv") %>% 
+  pivot_longer(cols = ff_avg_spin:sv_avg_spin,
+               names_to = "pitch_type",
+               values_to = "avg_spin") %>% 
+  mutate(pitch_type = substr(pitch_type, 1, 2),
+         pitch_type = toupper(pitch_type)) %>% 
+  filter(!is.na(`avg_spin`)) %>% 
+  rename(pitcher_id = pitcher) %>% 
+  select(-`last_name, first_name`) %>% 
+  mutate(year = 2023)
+
+
+# Combine Data ####
+data2021 <- movement_2021 %>% 
+  left_join(arsenal_2021, by = c("pitcher_id", "pitch_type", "year")) %>% 
+  mutate(pitcher_name = sapply(pitcher_name, swap_names)) %>% 
+  select(-pitcher_id)
+
+data2022 <- movement_2022 %>% 
+  left_join(arsenal_2022, by = c("pitcher_id", "pitch_type", "year")) %>% 
+  mutate(pitcher_name = sapply(pitcher_name, swap_names)) %>% 
+  select(-pitcher_id)
+
+data2023 <- movement_2023 %>% 
+  left_join(arsenal_2023, by = c("pitcher_id", "pitch_type", "year")) %>% 
+  mutate(pitcher_name = sapply(pitcher_name, swap_names)) %>% 
+  select(-pitcher_id)
+
+all_averages <- rbind(data2021, data2022, data2023) %>% 
+  na.omit()
+
+averages_table <- full_data %>% 
+  filter(!is.na(pitch_speed)) %>% 
+  mutate(pitch_speed = round(pitch_speed, 0)) %>% 
+  group_by(p_throws, pitch_type, pitch_speed) %>% 
+  summarize(min_x = min(pfx_x, na.rm = TRUE),
+            max_x = max(pfx_x, na.rm = TRUE),
+            min_z = min(pfx_z, na.rm = TRUE),
+            max_z = max(pfx_z, na.rm = TRUE),
+            min_spin = min(release_spin_rate, na.rm = TRUE),
+            max_spin = max(release_spin_rate, na.rm = TRUE))
+
+# Zone Data Pitch Count ####
+
+zone_data <- read_csv("zone_data.csv")
+
+zone_count <- full_data %>% 
+  filter(pitch_type %in% c("FF", "SI", "FC", "SL", "CU", "CH", "FS"),
+         !is.na(zone)) %>% 
+  group_by(p_throws, hitter, pitch_name, zone) %>% 
+  mutate(pitch_name = tolower(pitch_name),
+         p_throws = ifelse(p_throws == "L", "left", "right"),
+         hitter = ifelse(hitter == "L", "left", "right"),
+         pitch_name = case_when(pitch_name == "4-seam" ~ "fastball",
+                                pitch_name == "split-finger" ~ "splitter",
+                                TRUE ~ pitch_name)) %>% 
+  summarize(N = n()) %>% 
+  ungroup()
+
+
+
+zone_data2 <- zone_data %>% 
+  select(-...1) %>% 
+  mutate(zone = case_when(
+    x >= -1 & x < -0.33 & z <= 1 & z > 0.33  ~ 3, 
+    x >= -1 & x < -0.33 & z <= 0.33 & z >= -0.33 ~ 6,  
+    x >= -1 & x < -0.33 & z < -0.33 & z >= -1 ~ 9,
+    
+    x >= -0.33 & x <= 0.33 & z <= 1 & z > 0.33  ~ 2, 
+    x >= -0.33 & x <= 0.33 & z <= 0.33 & z >= -0.33 ~ 5,  
+    x >= -0.33 & x <= 0.33 & z < -0.33 & z >= -1 ~ 8,
+    
+    x > 0.33 & x <= 1 & z <= 1 & z > 0.33  ~ 1, 
+    x > 0.33 & x <= 1 & z <= 0.33 & z >= -0.33 ~ 4,  
+    x > 0.33 & x <= 1 & z < -0.33 & z >= -1 ~ 7,
+    
+    x > 0 & z >= 0 ~ 11,
+    x <= 0 & z > 0 ~ 12,
+    x >= 0 & z < 0 ~ 13,
+    x < 0 & z <= 0 ~ 14)) %>% 
+  left_join(zone_count, by = c("phand" = "p_throws", "bhand" = "hitter", 
+                               "pitch" = "pitch_name", "zone" = "zone"))
+
+
+
+# zone_data2 %>% 
+#   mutate(zone = as.factor(zone)) %>% 
+#   ggplot() +
+#   geom_point(aes(x = x, y = z, color = zone))
 
 
 
@@ -804,10 +1039,10 @@ write.csv(pitchers2, "lhp_pitches.csv")
 write.csv(pitchers3, "rhp_pitches.csv")
 
 # Pitch-by-Pitch All CSV
-write.csv(pitchers4, "all_pitches.csv")
+write.csv(pitchers4, "all_pitches.csv", row.names = FALSE)
 
 # Batter Stats
-write.csv(batters, "batter_stats.csv")
+# write.csv(batters, "batter_stats.csv")
 
 # Shiny App Comps
 write.csv(comps, "Pitcher_App_Comps.csv",
@@ -817,4 +1052,13 @@ write.csv(comps, "Pitcher_App_Comps.csv",
 write.csv(pred_means, "pred means.csv")
 
 # Zone Data
-write.csv(zone_data, "zone_data.csv")
+write.csv(zone_data_full, "zone_data.csv")
+
+# Zone Data (With N)
+write.csv(zone_data2, "zone_data_pc.csv", row.names = FALSE)
+
+# Movement Data (Input Ranges)
+write.csv(averages_table, "Movement.csv", row.names = FALSE)
+
+# Final Model
+write.csv(models_final, "models_final.csv", row.names = FALSE)

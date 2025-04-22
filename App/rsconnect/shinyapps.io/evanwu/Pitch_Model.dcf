@@ -1,0 +1,12 @@
+name: Pitch_Model
+title: Pitch_Model
+username: evanwu
+account: evanwu
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 14344835
+bundleId: 10034301
+url: https://evanwu.shinyapps.io/Pitch_Model/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

@@ -80,7 +80,7 @@ swap_names <- function(name) {
 
 ```{r Data 1}
 # Arsenal and Movement Information
-arsenal_spin <- read_csv("Pitch Type Data/2022_arsenal_spin.csv")
+arsenal_spin <- read_csv("App Comp Data/arsenal_2022.csv")
 
 movement <- read_csv("~/Downloads/Baseball Analytics/Diamond Dollars 2023/Statcast Data 2022/Group B/Libka 9-12-22/TEX at MIA 9-12-22.csv")
 
@@ -130,7 +130,6 @@ whiff_l <- LHP %>%
 
 # Full Dataset
 all <- read_csv("CSVs/all_pitches.csv") %>% 
-  select(-...1) %>% 
   mutate(wOBAr = case_when(
     woba >= 0.370 ~ 6,
     woba >= 0.340 ~ 5,
@@ -139,6 +138,9 @@ all <- read_csv("CSVs/all_pitches.csv") %>%
     woba >= 0.250 ~ 2,
     woba >= 0.220 ~ 1)) %>% 
   mutate(wOBAr = as.factor(wOBAr))
+
+lhp <- all %>% 
+  filter(p_throws == "L")
 
 ```
 <br>
@@ -287,7 +289,7 @@ strider %>%
 ```{r EDA 2}
 # Seasonal Movement Plot
 pitchers %>% 
-  filter(pitcher...8 == "641154") %>% 
+  filter(player_id == "641154") %>% 
   ggplot(aes(x = -pfx_x*12, y = pfx_z*12)) +
   geom_vline(xintercept = 0, linewidth = 0.5) +
   geom_hline(yintercept = 0, linewidth= 0.5) +
@@ -307,7 +309,7 @@ pitchers %>%
     plot.subtitle = element_text(hjust = 0.5))
 
 pitchers %>% 
-  filter(pitcher...8 == "666201") %>% 
+  filter(player_id == "666201") %>% 
   ggplot(aes(x = -pfx_x*12, y = pfx_z*12)) +
   geom_vline(xintercept = 0, linewidth = 0.5) +
   geom_hline(yintercept = 0, linewidth= 0.5) +
@@ -329,7 +331,7 @@ pitchers %>%
 
 # Seasonal Sinker Location
 pitchers %>% 
-  filter(pitcher...8 == "641154",
+  filter(player_id == "641154",
          pitch_name == "Sinker") %>% 
   ggplot(aes(x = -plate_x, y = plate_z)) +
   geom_zone() +
@@ -382,20 +384,35 @@ pitchers %>%
 
 
 # Induced Movement of Pitch Arsenal
-pitchers %>% 
-  mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
-  ggplot(aes(x = -pfx_x*12, y = pfx_z*12)) +
-  geom_jitter(aes(color = pitch_name), width = 0.25, height = 0, alpha = 0.25) +
-  facet_wrap(~ player_name) +
-  labs(title = "Induced Movement of Pitch Arsenal") +
-  NULL
+pitchers %>%
+  mutate(ID_num = case_when(ID == "Great" ~ 1,
+                            ID == "Decent" ~ 2,
+                            ID == "Bad" ~ 3)) %>% 
+  filter(!(pitch_name %in% c(NA, "Pitch Out"))) %>%
+  mutate(facet_label = paste0(player_name, " (", ID, ")"),
+         facet_label = fct_reorder(facet_label, ID_num, .desc = FALSE)) %>%
+  ggplot(aes(x = -pfx_x * 12, y = pfx_z * 12)) +
+  geom_vline(xintercept = 0, color = "black", size = 0.5) +
+  geom_hline(yintercept = 0, color = "black", size = 0.5) +
+  geom_point(aes(color = pitch_name), alpha = 0.4) +
+  facet_wrap(~ facet_label) +
+  labs(
+    title = "Pitch Movement of Pitch Arsenal",
+    subtitle = "2022 Season",
+    y = "Induced Vertical Break",
+    x = "Horizontal Break",
+    color = "Pitch Type"
+  ) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
 
 
 # Change in Run Expectancy
 pitchers %>% 
   filter(pitch_type == "FF") %>% 
   mutate(player_name = fct_reorder(as.factor(player_name), ID, .desc = TRUE)) %>% 
-  ggplot(aes(x = "", y = delta_run_exp)) +
+  ggplot(aes(x = "", y = run_exp_added)) +
   geom_jitter(aes(color = ID), width = 0.25, height = 0, alpha = 0.25) +
   facet_wrap(~ player_name) +
   labs(title = "Change in Run Expectancy") +
@@ -414,11 +431,11 @@ pitchers %>%
 
 # Making averages dataset
 avg <- pitchers %>% 
-  select(player_name, pitcher...8, ID, pitch_type, release_speed, pfx_x, pfx_z, 
+  select(player_name, player_id, ID, pitch_type, pitch_speed, pfx_x, pfx_z, 
          release_spin_rate, estimated_woba_using_speedangle) %>% 
   filter(!is.na(pitch_type)) %>% 
   group_by(player_name, pitch_type) %>% 
-  summarize("speed" = mean(release_speed, na.rm = TRUE), 
+  summarize("speed" = mean(pitch_speed, na.rm = TRUE), 
             "_x" = mean(pfx_x, na.rm = TRUE),
             "_z" = mean(pfx_z, na.rm = TRUE), 
             "spin_rate" = mean(release_spin_rate, na.rm = TRUE),
@@ -434,7 +451,7 @@ avg <- pitchers %>%
 delta_sl <- pitchers %>% 
   filter(pitch_type == "SL") %>% 
   left_join(avg, by = c("player_name", "pitch_type")) %>% 
-  mutate(delta_speed = release_speed - speed,
+  mutate(delta_speed = pitch_speed - speed,
          delta_mov_x = pfx_x - `_x`,
          delta_mov_z = pfx_x - `_z`,
          delta_spin = release_spin_rate - spin_rate) %>% 
@@ -465,7 +482,7 @@ delta_sl %>%
 # Calculating differences in metrics for all pitches
 delta_all <- pitchers %>% 
   left_join(avg, by = c("player_name", "pitch_type")) %>% 
-  mutate(delta_speed = release_speed - speed,
+  mutate(delta_speed = pitch_speed - speed,
          delta_mov_x = pfx_x - `_x`,
          delta_mov_z = pfx_x - `_z`,
          delta_spin = release_spin_rate - spin_rate) %>% 
@@ -496,7 +513,7 @@ delta_all %>%
 pitchers %>% 
   filter(pitch_type == "FF") %>% 
   left_join(avg, by = c("player_name", "pitch_type")) %>% 
-  mutate(delta_speed = release_speed - speed,
+  mutate(delta_speed = pitch_speed - speed,
          delta_mov_x = pfx_x - `_x`,
          delta_mov_z = pfx_x - `_z`,
          delta_spin = release_spin_rate - spin_rate) %>% 
@@ -520,28 +537,28 @@ pitcher_test <- pitchers %>%
 
 # Correlation between spin rate and run expectancy
 pitcher_test %>% 
-  filter(!is.na(release_spin_rate) & !is.na(delta_run_exp)) %>% 
-  with( cor(release_spin_rate, delta_run_exp) )
+  filter(!is.na(release_spin_rate) & !is.na(run_exp_added)) %>% 
+  with( cor(release_spin_rate, run_exp_added) )
 
 # Correlation between spin rate and run expectancy
 pitcher_test %>% 
-  filter(!is.na(release_speed) & !is.na(delta_run_exp)) %>% 
-  with( cor(release_speed, delta_run_exp) )
+  filter(!is.na(pitch_speed) & !is.na(run_exp_added)) %>% 
+  with( cor(pitch_speed, run_exp_added) )
 
 # Can batted ball type predict run expectancy?
-lm(delta_run_exp ~ bb_type, data = pitcher_test)
+lm(run_exp_added ~ bb_type, data = pitcher_test)
 # Intercept = Fly Ball
 
 test_model <- pitcher_test %>% 
   filter( !(player_name  %in% 
              c("Scherzer, Max", "Taillon, Jameson", "Berríos, José")) ) %>% 
-lm(delta_run_exp ~ bb_type, data = .)
+lm(run_exp_added ~ bb_type, data = .)
 
 test_testdata <- pitcher_test %>% 
   filter(player_name  %in% 
              c("Scherzer, Max", "Taillon, Jameson", "Berríos, José"),
          !is.na(bb_type)) %>% 
-  select(ID, pitch_type, delta_run_exp, bb_type)
+  select(ID, pitch_type, run_exp_added, bb_type)
 
 test_testdata %>% 
   mutate(preds = predict(test_model, test_testdata))
@@ -578,20 +595,20 @@ avgs %>%
 
 ```{r }
 # Distance from Center
-avg_dist <- pitchers %>% 
+avg_dist <- lhp %>% 
   filter(zone == 1) %>% 
-  summarize(mean(dist))
-avg_dist <- avg_dist$`mean(dist)`[1]
+  summarize(mean = mean(distance, na.rm = TRUE))
+avg_dist <- avg_dist$`mean`[1]
 
-pitchers %>% 
-  ggplot(aes(x = dist)) +
+lhp %>% 
+  ggplot(aes(x = distance)) +
   geom_histogram(color = "white", binwidth = 0.1)+
   geom_vline(xintercept = avg_dist, color = "green") +
    labs(x = "Distance from Center (ft)",
        title = "Distance from Center Distribution")
 
 # Delta Break
-pitchers %>% 
+lhp %>% 
   ggplot(aes(x = break_change*12)) +
   geom_histogram(color = "white", binwidth = 0.5) +
   labs(x = "Change in Break (in.)",
@@ -599,7 +616,7 @@ pitchers %>%
        subtitle = "Change computed versus the average of a given pitch type for a given date.")
 
 # Delta Speed
-pitchers %>% 
+lhp %>% 
   ggplot(aes(x = speed_change), alpha = 0.5) +
   geom_histogram(color = "white", binwidth = 0.25) +
   labs(x = "Change in Speed (mph)",
@@ -609,8 +626,8 @@ pitchers %>%
 ###########
 
 # Distance vs. RE
-pitchers %>% 
-  ggplot(aes(x = dist, y = delta_run_exp, color = pitch_name)) +
+lhp %>% 
+  ggplot(aes(x = distance, y = run_exp_added, color = pitch_name)) +
   geom_point(alpha = 0.25) +
   geom_smooth(se = FALSE, color = "black") +
   facet_wrap(~pitch_name) +
@@ -618,8 +635,8 @@ pitchers %>%
        title = "Run Expectancy by Distance from Center")
 
 # Delta Break vs. RE
-pitchers %>% 
-  ggplot(aes(x = break_change, y = delta_run_exp, color = pitch_name)) +
+lhp %>% 
+  ggplot(aes(x = break_change, y = run_exp_added, color = pitch_name)) +
   geom_point(alpha = 0.25) +
   geom_smooth(se = FALSE, color = "black") +
   facet_wrap(~pitch_name) +
@@ -627,8 +644,8 @@ pitchers %>%
        title = "Run Expectancy by Change in Break")
 
 # Delta Speed vs. RE
-pitchers %>% 
-  ggplot(aes(x = speed_change, y = delta_run_exp, color = pitch_name)) +
+lhp %>% 
+  ggplot(aes(x = speed_change, y = run_exp_added, color = pitch_name)) +
   geom_point(alpha = 0.25) +
   geom_smooth(se = FALSE, color = "black") +
   facet_wrap(~pitch_name) +
@@ -644,7 +661,7 @@ pitchers %>%
 
 # Pitch Speed
 whiff %>% 
-  ggplot(aes(y = whiff, x = release_speed, color = pitch_name)) +
+  ggplot(aes(y = whiff, x = pitch_speed, color = pitch_name)) +
   geom_violin() +
   geom_boxplot(alpha = 0.5, width = 0.5) +
   facet_wrap(~pitch_name) +
@@ -1083,4 +1100,3 @@ all %>%
         plot.subtitle = element_text(hjust = 0.5))
 
 ```
-
