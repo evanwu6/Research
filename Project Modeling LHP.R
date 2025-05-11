@@ -250,6 +250,3 @@ model %>%
   facet_grid(BHand ~ Response) +
   theme_dark()
 
-
-
-

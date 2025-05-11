@@ -112,10 +112,15 @@ get_zone <- function(x, z){
 }
 
 
+
 ui <- fluidPage(
  
   titlePanel("Pitch Effectiveness Predicter"),
   
+  tags$head(
+    tags$style(HTML("
+      body, label, .control-label, .btn, h1, h2, h3, h4, h5, h6 {
+        font-family: 'Times New Roman', Times, serif; }"))),
                      
   fluidRow(
     column(2,
@@ -160,9 +165,33 @@ ui <- fluidPage(
                
   ),
   
+  fluidRow(
+    column(2,            
+           actionButton("refresh", "Update Graphs"),
+    ),
+    
+    column(6, 
+           h3(textOutput("graphs_title"))),
+    
+  ),
+  
+  fluidRow(
+    column(2,
+    ),
+    column(6, 
+           h4(textOutput("update_indicator")),
+           br())
+    
+  ),
+  
   
   
   fluidRow(
+    tags$style(type = "text/css",
+               ".shiny-output-error {visibility:hidden;}",
+               ".shiny-output-error:before {visibility:hidden}"
+               ), # suppressing error messages
+    
         column(3,       
                plotOutput("zone", click = "plot_click")),
   
@@ -186,23 +215,35 @@ ui <- fluidPage(
            h5(textOutput("preds_title")),
            tableOutput("preds")
     )
-    ),
-  
-  fluidRow(
-    br(),
-    column(12,
-           textOutput("explanation")
     )
-  )
   
   
 ) # ui Fluid end
 
 
 server <- function(input, output, session) {
+
+  
+  
+  # stored_inputs <- list(pitch = "FF",
+  #                                 speed = 93,
+  #                                 movement_x = 11,
+  #                                 movement_z = 16,
+  #                                 spin = 2000,
+  #                                 p_hand = "R",
+  #                                 b_hand = "R")
+  
+  
+  # open <- observe({
+  #   
+  #   shinyjs::click("refresh")
+  #   open$destroy()
+  #   
+  # })
   
   
   click_coords <- reactiveValues(x = 0, y = 0)
+  
   
   observeEvent(input$plot_click, {
     click_coords$x <- tail(c(click_coords$x, input$plot_click$x), 1)
@@ -210,13 +251,6 @@ server <- function(input, output, session) {
   })
   
   
-  output$coord_x <- renderText({
-    paste("x = ", ifelse(click_coords$x > -1000, sprintf("%.2f", round(click_coords$x, 2)), ""))
-  })
-  
-  output$coord_y <- renderText({
-    paste("y = ", ifelse(click_coords$x > -1000, sprintf("%.2f", round(click_coords$y, 2)), ""))
-  })
   
   speed_filter <- reactive({
     speed_data <- movement %>%
@@ -267,8 +301,15 @@ server <- function(input, output, session) {
       the likelihood of various outcomes based on these inputted metrics and
       the specified pitch location, which can be changed by clicking any heat map.",
       br(),
+      br(),
+      "Set the input sliders and use the 'update graphs' button to create and update the heat maps with your pitch metric inputs.",
+      br(),
+      br(),
       "The heat maps and likelihood predictions are created using logistic regression models
-      using pitch-by-pitch data from the 2022 MLB season for every pitcher with 1800+ pitches on the season."),
+      using pitch-by-pitch data from the 2022 MLB season for every pitcher with 1800+ pitches on the season.
+      A purple and light pink color scale is used to denote the likelihood of an outcome, with purple being more desireable for the pitcher. Gray is shown in areas where the combination of pitch type, matchup, and location has insufficient data."),
+      br(),
+      "The pitch comparisons table displays the most similar pitches from the 2024 MLB season based on the inputted metrics. The table displays the metrics and performance of each pitch, as well as a similarity score. Similarity is based on a z-score metric where pitches that have lower scores are closer to the input values.",
       title = "App Explanation",
       footer = tagList(
         modalButton("x")
@@ -302,36 +343,53 @@ server <- function(input, output, session) {
   })
   
   
+  stored_inputs <- reactiveValues()
+
+
+  observeEvent(input$refresh, ignoreNULL = FALSE, {
+    stored_inputs$pitch <- input$pitch
+    stored_inputs$speed <- input$speed
+    stored_inputs$movement_x <- input$movement_x
+    stored_inputs$movement_z <- input$movement_z
+    stored_inputs$spin <- input$spin
+    stored_inputs$p_hand <- input$p_hand
+    stored_inputs$b_hand <- input$b_hand
+  })
+
   
-  output$zone <- renderPlot({
+  
+  
+  zone_plot1 <- reactive({
     
     # Whiff
+    
+    req(click_coords$x, click_coords$y)
+    
     
     dist_x <- 0
     dist_z <- 0
     
-    pitch <- case_when(input$pitch == "FF" ~ "fastball", 
-                       input$pitch == "SL" ~ "slider",
-                       input$pitch == "CU" ~ "curveball",
-                       input$pitch == "CH" ~ "changeup",
-                       input$pitch == "FC" ~ "cutter", 
-                       input$pitch == "SI" ~ "sinker",
-                       input$pitch == "FS" ~ "splitter",
+    pitch <- case_when(stored_inputs$pitch == "FF" ~ "fastball", 
+                       stored_inputs$pitch == "SL" ~ "slider",
+                       stored_inputs$pitch == "CU" ~ "curveball",
+                       stored_inputs$pitch == "CH" ~ "changeup",
+                       stored_inputs$pitch == "FC" ~ "cutter", 
+                       stored_inputs$pitch == "SI" ~ "sinker",
+                       stored_inputs$pitch == "FS" ~ "splitter",
                        TRUE ~ "fastball")
     
-    pitch_speed <- input$speed
-    pfx_x <- -input$movement_x
-    pfx_z <- input$movement_z
+    pitch_speed <- stored_inputs$speed
+    pfx_x <- -stored_inputs$movement_x
+    pfx_z <- stored_inputs$movement_z
     pfx_total <- sqrt(pfx_x^2 + pfx_z^2)
     dist_x <- click_coords$x
     dist_z <- click_coords$y
     dist_x2 <- ifelse(is.null(dist_x), 0, dist_x^2)
     dist_z2 <- ifelse(is.null(dist_z), 0, dist_z^2)
     dist_prop <- sqrt(dist_z^2 + dist_x^2)
-    release_spin_rate <- input$spin
-    b_hand <- input$b_hand
-    p_hand <- input$p_hand
-    
+    release_spin_rate <- stored_inputs$spin
+    b_hand <- stored_inputs$b_hand
+    p_hand <- stored_inputs$p_hand
     
     plate_x <- dist_x*0.708333
     plate_z <- 1.5 + dist_z*0.9
@@ -340,15 +398,12 @@ server <- function(input, output, session) {
       plate_x <= (-17/72) & plate_x >= (-39/48) & plate_z >= (2.8) & plate_z <= 3.4 ~ 3,
       plate_x >= (-17/72) & plate_x < (17/72) & plate_z >= (2.8) & plate_z <= 3.4 ~ 2,
       plate_x >= (17/72) & plate_x <= (39/48) & plate_z >= (2.8) & plate_z <= 3.4 ~ 1,
-      
       plate_x <= (-17/72) & plate_x >= (-39/48) & plate_z >= (2.2) & plate_z < (2.8) ~ 6,
       plate_x >= (-17/72) & plate_x < (17/72) & plate_z >= (2.2) & plate_z < (2.8) ~ 5,
       plate_x >= (17/72) & plate_x <= (39/48) & plate_z >= (2.2) & plate_z < (2.8) ~ 4,
-      
       plate_x <= (-17/72) & plate_x >= (-39/48) & plate_z <= (2.2) & plate_z >= 1.6 ~ 9,
       plate_x >= (-17/72) & plate_x < (17/72) & plate_z <= (2.2) & plate_z >= 1.6 ~ 8,
       plate_x >= (17/72) & plate_x <= (39/48) & plate_z <= (2.2) & plate_z >= 1.6 ~ 7,
-      
       plate_x >= 0 & plate_x <= (121/48) & plate_z >= 1.5 ~ 11,
       plate_x <= 0 & plate_x >= (-121/48) & plate_z >= 1.5 ~ 12,
       plate_x >= 0 & plate_x <= (121/48) & plate_z < 1.5 ~ 13,
@@ -367,7 +422,6 @@ server <- function(input, output, session) {
       pivot_wider(names_from = "term",
                   values_from = "estimate")
     
-    
     possible_cols <- c("(Intercept)", "pitch_speed", "pfx_x", "pfx_z", "pfx_total", 
                        "zone1", "zone2", "zone3", "zone4", "zone6", "zone7", 
                        "zone8", "zone9", "zone11", "zone12", "zone13", "zone14", 
@@ -375,8 +429,7 @@ server <- function(input, output, session) {
                        "release_spin_rate", "pred_bwhiff")
     
     for (col_name in possible_cols) {
-      if (col_name %in% colnames(test)) {
-      } else {
+      if (!(col_name %in% colnames(test))) {
         test[[col_name]] <- 0
       }
     }
@@ -398,7 +451,7 @@ server <- function(input, output, session) {
     pred_bwhiff <- pred_means %>% 
       filter(p_throws == p_hand,
              hitter == b_hand,
-             pitch_type == input$pitch) %>% 
+             pitch_type == stored_inputs$pitch) %>% 
       select(whiff_mean)
     
     prediction <- test$`(Intercept)` + test$pitch_speed*pitch_speed +
@@ -445,12 +498,12 @@ server <- function(input, output, session) {
     ggplot(heat_map) +
       geom_point(aes(x = x, y = z, 
                      color = pred), shape = 15, size = 5, alpha = 1) +
-      scale_color_gradient2(low = "white", high = "purple",
-                            labels = scales::percent, na.value = "gray85") +
+      scale_color_gradient(low = "#FFE6EE", high = "purple",
+                           labels = scales::percent, na.value = "gray85") +
       geom_rect(xmin = -1, xmax = 1, ymin = -1, ymax = 1,
                 alpha = 0, color = "black", linewidth = 1) +
       geom_point(data = NULL, aes(x = click_coords$x, y = click_coords$y),
-                color = "gray85", fill = "white", shape = 21, size = 10) +
+                 color = "gray85", fill = "white", shape = 21, size = 10) +
       geom_curve(data = NULL, aes(x = click_coords$x - 0.08, xend = click_coords$x - 0.08,
                                   y = click_coords$y - 0.065, yend = click_coords$y + 0.065),
                  curvature = 0.4,
@@ -467,42 +520,45 @@ server <- function(input, output, session) {
       theme(text = element_text(family = "Times New Roman"),
             plot.caption = element_text(hjust = 0.5, size = 16),
             plot.title = element_text(hjust = 0.5, size = 20))
+  })
   
-    
-   
-  
-    
-    
-    
+  output$zone <- renderPlot({
+    zone_plot1()
   })
   
   
   
-  output$zone2 <- renderPlot({
+  zone_plot2 <- reactive({
     
     # Barrel
     
-    pitch <- case_when(input$pitch == "FF" ~ "fastball", 
-                       input$pitch == "SL" ~ "slider",
-                       input$pitch == "CU" ~ "curveball",
-                       input$pitch == "CH" ~ "changeup",
-                       input$pitch == "FC" ~ "cutter", 
-                       input$pitch == "SI" ~ "sinker",
-                       input$pitch == "FS" ~ "splitter",
+    req(click_coords$x, click_coords$y)
+    
+    
+    dist_x <- 0
+    dist_z <- 0
+    
+    pitch <- case_when(stored_inputs$pitch == "FF" ~ "fastball", 
+                       stored_inputs$pitch == "SL" ~ "slider",
+                       stored_inputs$pitch == "CU" ~ "curveball",
+                       stored_inputs$pitch == "CH" ~ "changeup",
+                       stored_inputs$pitch == "FC" ~ "cutter", 
+                       stored_inputs$pitch == "SI" ~ "sinker",
+                       stored_inputs$pitch == "FS" ~ "splitter",
                        TRUE ~ "fastball")
     
-    pitch_speed <- input$speed
-    pfx_x <- -input$movement_x
-    pfx_z <- input$movement_z
+    pitch_speed <- stored_inputs$speed
+    pfx_x <- -stored_inputs$movement_x
+    pfx_z <- stored_inputs$movement_z
     pfx_total <- sqrt(pfx_x^2 + pfx_z^2)
     dist_x <- click_coords$x
     dist_z <- click_coords$y
     dist_x2 <- ifelse(is.null(dist_x), 0, dist_x^2)
     dist_z2 <- ifelse(is.null(dist_z), 0, dist_z^2)
     dist_prop <- sqrt(dist_z^2 + dist_x^2)
-    release_spin_rate <- input$spin
-    b_hand <- input$b_hand
-    p_hand <- input$p_hand
+    release_spin_rate <- stored_inputs$spin
+    b_hand <- stored_inputs$b_hand
+    p_hand <- stored_inputs$p_hand
     
     plate_x <- dist_x*0.708333
     plate_z <- 1.5 + dist_z*0.9
@@ -570,7 +626,7 @@ server <- function(input, output, session) {
     pred_bbarrel <- pred_means %>% 
       filter(p_throws == p_hand,
              hitter == b_hand,
-             pitch_type == input$pitch) %>% 
+             pitch_type == stored_inputs$pitch) %>% 
       select(barrel_mean)
     
     prediction <- test$`(Intercept)` + test$pitch_speed*pitch_speed +
@@ -617,7 +673,7 @@ server <- function(input, output, session) {
     ggplot(heat_map) +
       geom_point(aes(x = x, y = z, 
                      color = pred), shape = 15, size = 5, alpha = 1) +
-      scale_color_gradient2(low = "#F7FBFF", high = "purple",
+      scale_color_gradient(high = "#FFE6EE", low = "purple",
                             labels = scales::percent, na.value = "gray85") +
       geom_rect(xmin = -1, xmax = 1, ymin = -1, ymax = 1,
                 alpha = 0, color = "black", linewidth = 1) +
@@ -644,33 +700,43 @@ server <- function(input, output, session) {
     
   })
   
+  output$zone2 <- renderPlot({
+    zone_plot2()
+  })
   
   
-  output$zone3 <- renderPlot({
+  
+  zone_plot3 <- reactive({
     
     # Benefit
     
-    pitch <- case_when(input$pitch == "FF" ~ "fastball", 
-                       input$pitch == "SL" ~ "slider",
-                       input$pitch == "CU" ~ "curveball",
-                       input$pitch == "CH" ~ "changeup",
-                       input$pitch == "FC" ~ "cutter", 
-                       input$pitch == "SI" ~ "sinker",
-                       input$pitch == "FS" ~ "splitter",
+    req(click_coords$x, click_coords$y)
+    
+    
+    dist_x <- 0
+    dist_z <- 0
+    
+    pitch <- case_when(stored_inputs$pitch == "FF" ~ "fastball", 
+                       stored_inputs$pitch == "SL" ~ "slider",
+                       stored_inputs$pitch == "CU" ~ "curveball",
+                       stored_inputs$pitch == "CH" ~ "changeup",
+                       stored_inputs$pitch == "FC" ~ "cutter", 
+                       stored_inputs$pitch == "SI" ~ "sinker",
+                       stored_inputs$pitch == "FS" ~ "splitter",
                        TRUE ~ "fastball")
     
-    pitch_speed <- input$speed
-    pfx_x <- -input$movement_x
-    pfx_z <- input$movement_z
+    pitch_speed <- stored_inputs$speed
+    pfx_x <- -stored_inputs$movement_x
+    pfx_z <- stored_inputs$movement_z
     pfx_total <- sqrt(pfx_x^2 + pfx_z^2)
     dist_x <- click_coords$x
     dist_z <- click_coords$y
     dist_x2 <- ifelse(is.null(dist_x), 0, dist_x^2)
     dist_z2 <- ifelse(is.null(dist_z), 0, dist_z^2)
     dist_prop <- sqrt(dist_z^2 + dist_x^2)
-    release_spin_rate <- input$spin
-    b_hand <- input$b_hand
-    p_hand <- input$p_hand
+    release_spin_rate <- stored_inputs$spin
+    b_hand <- stored_inputs$b_hand
+    p_hand <- stored_inputs$p_hand
     
     plate_x <- dist_x*0.708333
     plate_z <- 1.5 + dist_z*0.9
@@ -738,7 +804,7 @@ server <- function(input, output, session) {
     pred_bbenefit <- pred_means %>% 
       filter(p_throws == p_hand,
              hitter == b_hand,
-             pitch_type == input$pitch) %>% 
+             pitch_type == stored_inputs$pitch) %>% 
       select(benefit_mean)
     
     prediction <- test$`(Intercept)` + test$pitch_speed*pitch_speed +
@@ -784,7 +850,7 @@ server <- function(input, output, session) {
     ggplot(heat_map) +
       geom_point(aes(x = x, y = z, 
                      color = pred), shape = 15, size = 5, alpha = 1) +
-      scale_color_gradient2(low = "#F7FBFF", high = "purple",
+      scale_color_gradient(low = "#FFE6EE", high = "purple",
                             labels = scales::percent, na.value = "gray85") +
       geom_rect(xmin = -1, xmax = 1, ymin = -1, ymax = 1,
                 alpha = 0, color = "black", linewidth = 1) +
@@ -811,15 +877,113 @@ server <- function(input, output, session) {
     
   })
   
+  output$zone3 <- renderPlot({
+    zone_plot3()
+  })
+  
+  
+  graphs_title <- reactive({
+    
+    pitch <- case_when(stored_inputs$pitch == "FF" ~ "Fastball", 
+                       stored_inputs$pitch == "SL" ~ "Slider",
+                       stored_inputs$pitch == "CU" ~ "Curveball",
+                       stored_inputs$pitch == "CH" ~ "Change Up",
+                       stored_inputs$pitch == "FC" ~ "Cutter", 
+                       stored_inputs$pitch == "SI" ~ "Sinker",
+                       stored_inputs$pitch == "FS" ~ "Splitter")
+   
+    params <- list(
+    
+    pitch = pitch,
+    pitch_speed = stored_inputs$speed,
+    pfx_x = -stored_inputs$movement_x,
+    pfx_z = stored_inputs$movement_z,
+    release_spin_rate = stored_inputs$spin,
+    b_hand = stored_inputs$b_hand,
+    p_hand = stored_inputs$p_hand
+    
+    )
+    
+    plot_title <- paste0("Graphs Display A ", params$pitch_speed, " MPH ", 
+                        params$pitch, " From A ", params$p_hand, "HP To A ", 
+                        params$b_hand, "HH")
+    
+    plot_title
+    
+    
+    
+  })
+  
+  output$graphs_title <- renderText({
+    graphs_title()
+  })
+  
+  
+  
+  info <- reactive({
+    params <- list(
+      pitch = stored_inputs$pitch,
+      pitch_speed = stored_inputs$speed,
+      pfx_x = -stored_inputs$movement_x,
+      pfx_z = stored_inputs$movement_z,
+      release_spin_rate = stored_inputs$spin,
+      b_hand = stored_inputs$b_hand,
+      p_hand = stored_inputs$p_hand
+    )
+    return(params)
+  })
+  
+  
+  output$update_indicator <- 
+    renderText({
+    current <- list(
+      pitch = input$pitch,
+      pitch_speed = input$speed,
+      pfx_x = -input$movement_x,
+      pfx_z = input$movement_z,
+      release_spin_rate = input$spin,
+      b_hand = input$b_hand,
+      p_hand = input$p_hand
+    )
+    
+    params <- info()
+    
+    
+    if(current$pitch == params$pitch & current$pitch_speed == params$pitch_speed &
+       current$pfx_x == params$pfx_x & current$pfx_z == params$pfx_z &
+       current$release_spin_rate == params$release_spin_rate & 
+       current$b_hand == params$b_hand & current$p_hand == params$p_hand) {
+      
+      indicator <- 0  # Same
+    } 
+    
+    else {
+      indicator <- 1  # Different
+    }
+    
+    if (indicator == 0) {
+      return("")
+    } else {
+      return("Graph values have been changed. Click 'update' for updated graphs")
+    }
+  })
+
+  
+  
+
+  
+  
+  
+  
   
   output$comps <- render_gt({
-    p_hand <- input$p_hand
-    b_hand <- input$b_hand
-    pitch <- input$pitch
-    speed <- input$speed
-    spin <- input$spin
-    move_x <- input$movement_x
-    move_z <- input$movement_z
+    p_hand <- stored_inputs$p_hand
+    b_hand <- stored_inputs$b_hand
+    pitch <- stored_inputs$pitch
+    speed <- stored_inputs$speed
+    spin <- stored_inputs$spin
+    move_x <- stored_inputs$movement_x
+    move_z <- stored_inputs$movement_z
     
     comps <- comp_data %>% 
       filter(p_throws == p_hand,
@@ -842,7 +1006,7 @@ server <- function(input, output, session) {
              `Spin Rate` = format(`Spin Rate`, big.mark = ",", nsmall = 0),
              `Hor Break` = format(`X Movement`, nsmall = 1),
              `IVB` = format(`Z Movement`, nsmall = 1),
-             `Whiff%` = percent(`Whiff Prop`, accuracy = 0.1),
+             `Swing&Miss%` = percent(`Whiff Prop`, accuracy = 0.1),
              `Barrel%` = percent(`Barrel Prop`, accuracy = 0.1),
              `+RE%` = percent(`+RE Prop`, accuracy = 0.1),
              similarity = format(similarity, nsmall = 1)) %>% 
@@ -852,19 +1016,20 @@ server <- function(input, output, session) {
                                Pitch == "CH" ~ "Changeup",
                                Pitch == "FC" ~ "Cutter",
                                Pitch == "SI" ~ "Sinker",
-                               Pitch == "FS" ~ "Splitter")) %>% 
-      select(Pitch, Name, Speed, `Spin Rate`, `Hor Break`, IVB, `Whiff%`, `Barrel%`, `+RE%`, similarity) %>% 
+                               Pitch == "FS" ~ "Splitter",
+                               Pitch == "ST" ~ "Sweeper",
+                               Pitch == "KC" ~ "Knuckle Curve")) %>% 
+      select(Pitch, Name, Speed, `Spin Rate`, `Hor Break`, IVB, `Swing&Miss%`, `Barrel%`, `+RE%`, similarity) %>% 
       head(10)
     
     comps %>% 
-      gt()
+      gt() %>% 
+      tab_options(table.font.names = "Times New Roman")
     
     
   })
   
-  output$explanation <- renderText({
-    "This app was created using logistic regression models to predict outcome probabilities based on pitch metrics. The data used for the models was pitch-by-pitch data from the 2022 MLB season for every pitcher with 1800+ pitches on the season."
-  })
+
   
   
   

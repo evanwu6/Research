@@ -308,6 +308,8 @@ server <- function(input, output, session) {
       "The heat maps and likelihood predictions are created using logistic regression models
       using pitch-by-pitch data from the 2022 MLB season for every pitcher with 1800+ pitches on the season.
       A purple and light pink color scale is used to denote the likelihood of an outcome, with purple being more desireable for the pitcher. Gray is shown in areas where the combination of pitch type, matchup, and location has insufficient data."),
+      br(),
+      "The pitch comparisons table displays the most similar pitches from the 2024 MLB season based on the inputted metrics. The table displays the metrics and performance of each pitch, as well as a similarity score. Similarity is based on a z-score metric where pitches that have lower scores are closer to the input values.",
       title = "App Explanation",
       footer = tagList(
         modalButton("x")
@@ -1004,7 +1006,7 @@ server <- function(input, output, session) {
              `Spin Rate` = format(`Spin Rate`, big.mark = ",", nsmall = 0),
              `Hor Break` = format(`X Movement`, nsmall = 1),
              `IVB` = format(`Z Movement`, nsmall = 1),
-             `Whiff%` = percent(`Whiff Prop`, accuracy = 0.1),
+             `Swing&Miss%` = percent(`Whiff Prop`, accuracy = 0.1),
              `Barrel%` = percent(`Barrel Prop`, accuracy = 0.1),
              `+RE%` = percent(`+RE Prop`, accuracy = 0.1),
              similarity = format(similarity, nsmall = 1)) %>% 
@@ -1017,7 +1019,7 @@ server <- function(input, output, session) {
                                Pitch == "FS" ~ "Splitter",
                                Pitch == "ST" ~ "Sweeper",
                                Pitch == "KC" ~ "Knuckle Curve")) %>% 
-      select(Pitch, Name, Speed, `Spin Rate`, `Hor Break`, IVB, `Whiff%`, `Barrel%`, `+RE%`, similarity) %>% 
+      select(Pitch, Name, Speed, `Spin Rate`, `Hor Break`, IVB, `Swing&Miss%`, `Barrel%`, `+RE%`, similarity) %>% 
       head(10)
     
     comps %>% 

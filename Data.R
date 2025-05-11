@@ -568,6 +568,26 @@ comps <- full_data %>%
   rename(Name = player_name) %>% 
   filter(Pitches >= 100)
 
+# 2024 Comps
+Data2024 <- read_csv("Pitch Level Data/Data2024.csv") %>% 
+  filter(game_year == 2024)
+comps <- Data2024 %>% 
+  mutate(is_benefit = ifelse(delta_pitcher_run_exp > 0, 1, 0),
+         is_barrel = is.barrel(launch_angle, launch_speed),
+         whiff = ifelse(description == "swinging_strike", 1, 0),
+         player_name = sapply(player_name, swap_names)) %>% 
+  group_by(player_name, pitch_type, p_throws, hitter) %>% 
+  summarize(Pitches = n(),
+            Speed = mean(release_speed, na.rm = TRUE),
+            "Spin Rate" = mean(release_spin_rate, na.rm = TRUE),
+            "X Movement" = mean(pfx_x, na.rm = TRUE),
+            "Z Movement" = mean(pfx_z, na.rm = TRUE),
+            "Whiff Prop" = mean(whiff, na.rm = TRUE),
+            "Benefit Prop" = mean(is_benefit, na.rm = TRUE), 
+            "Barrel Prop" = mean(is_barrel, na.rm = TRUE)) %>% 
+  rename(Name = player_name) %>% 
+  filter(Pitches >= 100)
+
 
 # Batter Prediction Averages ####
 
